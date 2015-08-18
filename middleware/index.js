@@ -12,7 +12,7 @@ exports.createConnection = function(req,res,next){
 			}) 
 		} else {
 			req.conn = conn
-			console.log('connection established')
+			console.log('connection established with ' + req.ip)
 		}
 		next()
 	}

@@ -13,35 +13,48 @@ var pool = mysql.createPool({
 	database : 'modelcollectiondb'
 })
 
-//encapsulate the pool.getConnection() function in another function
+//shared functions
 exports.getConnection = function(callback){
+	//encapsulate the pool.getConnection() function in another function
 	pool.getConnection(function(err,connection){
 		callback(err,connection)
 	})
 }
 
-//create storage for shared functions
-//var shared = {}
-//assign the shared storage to the exportable functions 
-//module.exports.Share = shared
-//add getConnection() to the exportable functions
-//shared.getConnection = getConnection 
+exports.throwSQLError = function(err,res){
+	console.error('There is an error in your SQL Syntax\n',err)
+	res.status = 500
+	res.json({
+		success : false,
+		error : err.code
+	})	
+}
+
+exports.sendSQLResults = function(res,rows){
+	res.json({
+		success : true,
+		error : '',
+		result : rows,
+		length : rows.length
+	})
+}
 
 app.set('port',5050)
 
-//var routes = require('./routes')
+//import modules
 var account = require('./routes/account.js')
 var model = require('./routes/model.js')
 var middleware = require('./middleware')
 
+//add middleware that will be used in all endpoints
 app.use(bodyParser.urlencoded({extended : false}))
 app.use(bodyParser.json())
 app.use(middleware.createConnection)
 
-app.get("/",function(req,res){
-	console.log("endpoint")
-	res.send("render finished")
-})
+app.get('/models/view/:category',model.listModels)
+app.get('/models/category',model.listCategories)
+
+app.get('/model/view/:id',model.viewModel)
 
 http.createServer(app).listen(app.get('port'),function(){
 	console.log('Model Collection API Listening on port ' + app.get('port') +'...')
