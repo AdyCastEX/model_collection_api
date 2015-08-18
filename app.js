@@ -32,7 +32,16 @@ app.set('port',5050)
 //var routes = require('./routes')
 var account = require('./routes/account.js')
 var model = require('./routes/model.js')
-//var middleware = require('./middleware')
+var middleware = require('./middleware')
+
+app.use(bodyParser.urlencoded({extended : false}))
+app.use(bodyParser.json())
+app.use(middleware.createConnection)
+
+app.get("/",function(req,res){
+	console.log("endpoint")
+	res.send("render finished")
+})
 
 http.createServer(app).listen(app.get('port'),function(){
 	console.log('Model Collection API Listening on port ' + app.get('port') +'...')
