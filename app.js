@@ -55,6 +55,7 @@ app.get('/models/view/:category',model.listModels)
 app.get('/models/category',model.listCategories)
 
 app.get('/model/view/:id',model.viewModel)
+app.post('/model/create',model.createModel)
 
 http.createServer(app).listen(app.get('port'),function(){
 	console.log('Model Collection API Listening on port ' + app.get('port') +'...')

@@ -6,6 +6,45 @@ var sendSQLResults = shared.sendSQLResults
 var query = ''
 var queryParams = []
 
+/*
+ 	Creates a json object that maps table columns(keys) to attributes(values) in a request body
+ 	
+ 	Parameters:
+
+ 	rows             -- the resulting rows of an SQL query that fetches a table's column details
+ 	details          -- the json object that will contain the keys and values
+ 	body             -- a json object that contains attributes from a request body  
+*/
+var buildDetails = function(rows,details,body){
+	var rowLength = rows.length
+	var field
+
+	for(var i=0;i<rowLength;i+=1){
+		//since the row contains more details, get only the field which is the column name
+		field = rows[i]['Field']
+		//map the column to the corresponding value in the request body
+		details[field] = body[field]
+	}
+}
+
+/*
+	Gets the keys and values of a json object
+
+	Parameters:
+
+	object            -- the json object to process
+	keys              -- an array where the keys will be stored
+	values            -- an array where the values will be stored	
+*/
+var getKeyValues = function(object,keys,values){
+	
+	//traverse through all the keys in the object
+	for(key in object){
+		keys.push(key)
+		values.push(object[key])
+	}
+}
+
 exports.listModels = function(req,res,next){
 	var category = req.params.category
 	var categoryId
@@ -78,7 +117,7 @@ exports.viewModel = function(req,res,next){
 		} else {
 			sendSQLResults(res,rows)
 		}
-		req.conn.release
+		req.conn.release()
 	}
 
 	var getCategoryNameCallback = function(err,rows,fields){
@@ -131,4 +170,89 @@ exports.viewModel = function(req,res,next){
 	queryParams = []
 	queryParams.push(modelId)
 	req.conn.query(query,queryParams,getCategoryIdCallback)
+}
+
+exports.createModel = function(req,res,next){
+	var body = req.body
+	var categoryColumns
+	var modelDetails = {}
+	var specificDetails = {}
+	var keys
+	var values
+	var category = body['category']
+	
+	var insertModelCategoryCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			sendSQLResults(res,rows)
+			req.conn.release()
+		}
+	}
+
+	var insertSpecificModelCallback = function(err,rows,fields){
+
+	}
+
+	var insertModelCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			if(category === 'other'){ //if the model falls under the 'other' category, go straight to inserting the the model_has_category table
+				//LAST_INSERT_ID() contains the id of the last model inserted
+				//to get the category id, run a subquery 
+				query = 'INSERT INTO model_has_category (model_id,category_id) VALUES (LAST_INSERT_ID(),(SELECT id FROM category WHERE name = ?))'
+				queryParams = []
+				queryParams.push(category)
+				req.conn.query(query,queryParams,insertModelCategoryCallback)
+			} else { //else insert into the specific table of the model's category
+
+			}
+		}
+	}
+
+	var getSpecificColumnsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			buildDetails(rows,specificDetails,body)
+			console.log(specificDetails)
+			keys = []
+			values = []
+			getKeyValues(specificDetails,keys,values)
+
+		}
+	}
+	
+	var getColumnsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+
+			//map the model details to the values in the request body
+			buildDetails(rows,modelDetails,body)
+			keys = []
+			values = []
+			getKeyValues(modelDetails,keys,values)
+
+			if(category === 'other'){ //if the model falls under the 'other' category, go straight to inserting the model
+				query = 'INSERT INTO model (??) VALUES (?)'
+				queryParams = []
+				queryParams.push(keys)
+				queryParams.push(values)
+				req.conn.query(query,queryParams,insertModelCallback)
+			} else { //else determine the columns of the specific model table
+				query = 'SHOW COLUMNS from ??'
+				queryParams = []
+				queryParams.push(body['category'])
+				req.conn.query(query,queryParams,getSpecificColumnsCallback)
+			}
+		}
+	}
+
+	//determine the columns of the model table through this SQL query
+	query = 'SHOW COLUMNS from model'
+	queryParams = []
+	req.conn.query(query,queryParams,getColumnsCallback) 
+
 }
