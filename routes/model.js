@@ -174,12 +174,12 @@ exports.viewModel = function(req,res,next){
 
 exports.createModel = function(req,res,next){
 	var body = req.body
-	var categoryColumns
 	var modelDetails = {}
 	var specificDetails = {}
 	var keys
 	var values
 	var category = body['category']
+	var insertId = ''
 	
 	var insertModelCategoryCallback = function(err,rows,fields){
 		if(err){
@@ -191,23 +191,15 @@ exports.createModel = function(req,res,next){
 	}
 
 	var insertSpecificModelCallback = function(err,rows,fields){
-
-	}
-
-	var insertModelCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
 		} else {
-			if(category === 'other'){ //if the model falls under the 'other' category, go straight to inserting the the model_has_category table
-				//LAST_INSERT_ID() contains the id of the last model inserted
-				//to get the category id, run a subquery 
-				query = 'INSERT INTO model_has_category (model_id,category_id) VALUES (LAST_INSERT_ID(),(SELECT id FROM category WHERE name = ?))'
-				queryParams = []
-				queryParams.push(category)
-				req.conn.query(query,queryParams,insertModelCategoryCallback)
-			} else { //else insert into the specific table of the model's category
-
-			}
+			//set the category of the model by inserting into the model_has_category table
+			query = 'INSERT INTO model_has_category (model_id,category_id) VALUES (?,(SELECT id FROM category WHERE name = ?))'
+			queryParams = []
+			queryParams.push(insertId)
+			queryParams.push(category)
+			req.conn.query(query,queryParams,insertModelCategoryCallback)
 		}
 	}
 
@@ -215,15 +207,47 @@ exports.createModel = function(req,res,next){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			//build the details of specific category
 			buildDetails(rows,specificDetails,body)
-			console.log(specificDetails)
+			//override the NULL model_id field as the id of the last inserted model
+			specificDetails['model_id']  = insertId
 			keys = []
 			values = []
 			getKeyValues(specificDetails,keys,values)
 
+			//insert into the specific category table
+			query = 'INSERT INTO ?? (??) VALUES (?)'
+			queryParams = []
+			queryParams.push(category)
+			queryParams.push(keys)
+			queryParams.push(values)
+			req.conn.query(query,queryParams,insertSpecificModelCallback)
 		}
 	}
-	
+
+	var insertModelCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			//set insertId as the id of the last row inserted to the model table
+			insertId = rows.insertId
+
+			if(category === 'other'){ //if the model falls under the 'other' category, go straight to inserting the the model_has_category table
+				//to get the category id, run a subquery 
+				query = 'INSERT INTO model_has_category (model_id,category_id) VALUES (?,(SELECT id FROM category WHERE name = ?))'
+				queryParams = []
+				queryParams.push(insertId)
+				queryParams.push(category)
+				req.conn.query(query,queryParams,insertModelCategoryCallback)
+			} else { //else get the columns of the specific category table
+				query = 'SHOW COLUMNS from ??'
+				queryParams = []
+				queryParams.push(category)
+				req.conn.query(query,queryParams,getSpecificColumnsCallback)
+			}
+		}
+	}
+
 	var getColumnsCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
@@ -234,19 +258,14 @@ exports.createModel = function(req,res,next){
 			keys = []
 			values = []
 			getKeyValues(modelDetails,keys,values)
+			console.log(modelDetails)
 
-			if(category === 'other'){ //if the model falls under the 'other' category, go straight to inserting the model
-				query = 'INSERT INTO model (??) VALUES (?)'
-				queryParams = []
-				queryParams.push(keys)
-				queryParams.push(values)
-				req.conn.query(query,queryParams,insertModelCallback)
-			} else { //else determine the columns of the specific model table
-				query = 'SHOW COLUMNS from ??'
-				queryParams = []
-				queryParams.push(body['category'])
-				req.conn.query(query,queryParams,getSpecificColumnsCallback)
-			}
+			//insert the model based on the model details
+			query = 'INSERT INTO model (??) VALUES (?)'
+			queryParams = []
+			queryParams.push(keys)
+			queryParams.push(values)
+			req.conn.query(query,queryParams,insertModelCallback)
 		}
 	}
 
