@@ -258,7 +258,7 @@ exports.createModel = function(req,res,next){
 			keys = []
 			values = []
 			getKeyValues(modelDetails,keys,values)
-			console.log(modelDetails)
+			//console.log(modelDetails)
 
 			//insert the model based on the model details
 			query = 'INSERT INTO model (??) VALUES (?)'
@@ -273,5 +273,55 @@ exports.createModel = function(req,res,next){
 	query = 'SHOW COLUMNS from model'
 	queryParams = []
 	req.conn.query(query,queryParams,getColumnsCallback) 
+
+}
+
+exports.deleteModel = function(req,res,next){
+	var table = req.params.table
+	var id = req.params.id
+	var category = ''
+
+	var removeModelCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			sendSQLResults(res,rows)
+			req.conn.release()
+		}
+	}
+
+	var removeCategoryCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			query = 'DELETE FROM ?? WHERE id = ?'
+			queryParams = []
+			queryParams.push(table)
+			queryParams.push(id)
+			req.conn.query(query,queryParams,removeModelCallback)
+		}
+	}
+
+	var getCategoryCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			category = rows[0]['name']
+			console.log(category)
+
+			if(category === 'other'){
+				query = 'DELETE FROM model_has_category WHERE model_id = ?'
+				queryParams = []
+				queryParams.push(id)
+				req.conn.query(query,queryParams,removeCategoryCallback)
+			} else {
+
+			}
+		}
+	}
+
+	query = 'SELECT id, name FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
+	queryParams.push(id)
+	req.conn.query(query,queryParams,getCategoryCallback)
 
 }
