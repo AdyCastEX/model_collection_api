@@ -22,8 +22,16 @@ var buildDetails = function(rows,details,body){
 	for(var i=0;i<rowLength;i+=1){
 		//since the row contains more details, get only the field which is the column name
 		field = rows[i]['Field']
-		//map the column to the corresponding value in the request body
-		details[field] = body[field]
+		//add the field to the details only if it can be found in the body
+		if(field in body){
+			if(body[field] === ''){
+				//replace blank fields with a null value
+				details[field] = null
+			} else {
+				//map the column to the corresponding value in the request body
+				details[field] = body[field]
+			}
+		}
 	}
 }
 
@@ -337,7 +345,93 @@ exports.deleteModel = function(req,res,next){
 
 	//find the category (id and name) of the model to delete 
 	query = 'SELECT id, name FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
+	queryParams = []
 	queryParams.push(id)
 	req.conn.query(query,queryParams,getCategoryCallback)
 
+}
+
+exports.updateModel = function(req,res,next){
+	var body = req.body
+	var id = req.params.id
+	var category = ''
+	var modelDetails = {}
+
+	var updateModelCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			sendSQLResults(res,rows)
+			req.conn.release()
+		}
+	}
+
+	var getColumnsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			modelDetails = {}
+			//build the model details to update
+			buildDetails(rows,modelDetails,body)
+			//update the model
+			query = 'UPDATE model SET ? WHERE id = ?'
+			queryParams = []
+			queryParams.push(modelDetails)
+			queryParams.push(id)
+			req.conn.query(query,queryParams,updateModelCallback)
+		}
+	}
+
+	var updateSpecificModelCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			query = 'SHOW COLUMNS FROM model'
+			queryParams = []
+			req.conn.query(query,queryParams,getColumnsCallback)
+		}
+	}
+
+	var getSpecificColumnsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			modelDetails = {}
+			//build the model details to update
+			buildDetails(rows,modelDetails,body)
+			//update the model specified by model_id
+			query = 'UPDATE ?? SET ? WHERE model_id = ?'
+			queryParams = []
+			queryParams.push(category)
+			queryParams.push(modelDetails)
+			queryParams.push(id)
+			req.conn.query(query,queryParams,updateSpecificModelCallback)
+		}
+	}
+
+	var getCategoryCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			//get the category from the result of the previous query
+			category = rows[0]['name']
+
+			if(category === 'other'){ //if the model falls under the 'other' category, update only the model table
+				query = 'SHOW COLUMNS FROM model'
+				queryParams = []
+				req.conn.query(query,queryParams,getColumnsCallback)
+			} else { //else update the table of the specific model category
+				query = 'SHOW COLUMNS FROM ??'
+				queryParams = []
+				queryParams.push(category)
+				req.conn.query(query,queryParams,getSpecificColumnsCallback)
+			}
+		}
+	}
+
+	//determine the category of the model
+	query = 'SELECT id, name FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
+	queryParams = []
+	queryParams.push(id)
+	req.conn.query(query,queryParams,getCategoryCallback)
 }
