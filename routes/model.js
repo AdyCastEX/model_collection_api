@@ -293,7 +293,7 @@ exports.deleteModel = function(req,res,next){
 	var removeCategoryCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
-		} else {
+		} else { //delete the model from the specified table (model or custom_model)
 			query = 'DELETE FROM ?? WHERE id = ?'
 			queryParams = []
 			queryParams.push(table)
@@ -302,24 +302,40 @@ exports.deleteModel = function(req,res,next){
 		}
 	}
 
+	var removeSpecificModelCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else { //delete the model from the model_has_category table
+			query = 'DELETE FROM model_has_category WHERE model_id = ?'
+			queryParams = []
+			queryParams.push(id)
+			req.conn.query(query,queryParams,removeCategoryCallback)
+		}
+	}
+
 	var getCategoryCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			//identify the category name from the result of the previous query
 			category = rows[0]['name']
-			console.log(category)
 
-			if(category === 'other'){
+			if(category === 'other'){ //if in 'other' category, proceed to deleting the model from the model_has_category table
 				query = 'DELETE FROM model_has_category WHERE model_id = ?'
 				queryParams = []
 				queryParams.push(id)
 				req.conn.query(query,queryParams,removeCategoryCallback)
-			} else {
-
+			} else { //else delete the model from the specific category table first
+				query = 'DELETE FROM ?? WHERE model_id = ?'
+				queryParams = []
+				queryParams.push(category)
+				queryParams.push(id)
+				req.conn.query(query,queryParams,removeSpecificModelCallback)
 			}
 		}
 	}
 
+	//find the category (id and name) of the model to delete 
 	query = 'SELECT id, name FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
 	queryParams.push(id)
 	req.conn.query(query,queryParams,getCategoryCallback)
