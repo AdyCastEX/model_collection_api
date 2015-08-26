@@ -435,3 +435,124 @@ exports.updateModel = function(req,res,next){
 	queryParams.push(id)
 	req.conn.query(query,queryParams,getCategoryCallback)
 }
+
+exports.changeCategory = function(req,res,next){
+	var modelId = req.params.id
+	var newCategoryId = req.params.category_id
+	var newCategoryName
+	var body = req.body
+	var modelDetails = {}
+	var categoryId
+	var categoryName
+	var keys
+	var values
+
+	var updateCategoryCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			sendSQLResults(res,rows)
+			req.conn.release()
+		}
+	}
+
+	var insertSpecificModelCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else { //change the category of the model in the model_has_category table
+			query = 'UPDATE model_has_category SET category_id = ? WHERE model_id = ?'
+			queryParams = []
+			queryParams.push(newCategoryId)
+			queryParams.push(modelId)
+			req.conn.query(query,queryParams,updateCategoryCallback)
+		}
+	}
+
+	var getNewCategoryColumnsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else { //build details and insert into the specific table of the new category
+			modelDetails = {}
+			buildDetails(rows,modelDetails,body)
+			modelDetails['model_id'] = modelId
+			keys = []
+			values = []
+			getKeyValues(modelDetails,keys,values)
+			query = 'INSERT INTO ?? (??) VALUES (?)'
+			queryParams = []
+			queryParams.push(newCategoryName)
+			queryParams.push(keys)
+			queryParams.push(values)
+			req.conn.query(query,queryParams,insertSpecificModelCallback)
+		}
+	}
+
+	var getNewCategoryNameCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			newCategoryName = rows[0]['name']
+
+			if(newCategoryName === 'other'){ //no need to insert into a specific model table
+				query = 'UPDATE model_has_category SET category_id = ? WHERE model_id = ?'
+				queryParams = []
+				queryParams.push(newCategoryId)
+				queryParams.push(modelId)
+				req.conn.query(query,queryParams,updateCategoryCallback)
+			} else { //need to determine what attributes will be inserted
+				query = 'SHOW COLUMNS FROM ??'
+				queryParams = []
+				queryParams.push(newCategoryName)
+				req.conn.query(query,queryParams,getNewCategoryColumnsCallback)
+			}
+		}
+	}
+
+	var deleteSpecificModelCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else { //determine the name of the model's new category
+			query = 'SELECT name FROM category WHERE id = ?'
+			queryParams = []
+			queryParams.push(newCategoryId)
+			req.conn.query(query,queryParams,getNewCategoryNameCallback)
+		}
+	}
+
+	var getCategoryCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {	
+			categoryId = rows[0]['id']
+			categoryName = rows[0]['name']
+
+			if(categoryId == newCategoryId){ //no need to perform database processing if the new category is the same as the current one
+				res.status = 500
+				res.json({
+					success : false,
+					error : 'CATEGORY_NOT_UPDATED'	
+				})
+				req.conn.release()
+			} else { //perform the necessary changes
+				if(categoryName === 'other'){ //if the model will be changed to the 'other' category, there is no need to delete the entry from the model's specific category
+					query = 'SELECT name FROM category WHERE id = ?'
+					queryParams = []
+					queryParams.push(newCategoryId)
+					req.conn.query(query,queryParams,getNewCategoryNameCallback)
+				} else { //delete the model's entry from its specific table
+					query = 'DELETE FROM ?? WHERE model_id = ?'
+					queryParams = []
+					queryParams.push(categoryName)
+					queryParams.push(modelId)
+					req.conn.query(query,queryParams,deleteSpecificModelCallback)
+				}
+			}
+		}
+	}
+
+	//determine the category of the model
+	query = 'SELECT id, name FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
+	queryParams = []
+	queryParams.push(modelId)
+	req.conn.query(query,queryParams,getCategoryCallback)
+}
