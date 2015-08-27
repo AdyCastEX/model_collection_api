@@ -626,3 +626,34 @@ exports.createCustomModel = function(req,res,next){
 	queryParams = []
 	req.conn.query(query,queryParams,getCustomModelColumnsCallback)
 }
+
+exports.deleteCustomModel = function(req,res,next){
+	var customModelId = req.params.id
+
+	var deleteCustomModelCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			sendSQLResults(res,rows)
+			req.conn.release()
+		}
+	}
+
+	var deleteComponentsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			//delete the custom model
+			query = 'DELETE FROM custom_model WHERE id = ?'
+			queryParams = []
+			queryParams.push(customModelId)
+			req.conn.query(query,queryParams,deleteCustomModelCallback)
+		}
+	}
+
+	//remove the custom model's connections with component models
+	query = 'DELETE FROM custom_model_composed_of_model WHERE custom_model_id = ?'
+	queryParams = []
+	queryParams.push(customModelId)
+	req.conn.query(query,queryParams,deleteComponentsCallback)
+}
