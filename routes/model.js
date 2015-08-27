@@ -556,3 +556,73 @@ exports.changeCategory = function(req,res,next){
 	queryParams.push(modelId)
 	req.conn.query(query,queryParams,getCategoryCallback)
 }
+
+exports.createCustomModel = function(req,res,next){
+	var body = req.body
+	var modelDetails = {}
+	var keys = []
+	var values = []
+	var components = body.components
+	var insertId
+
+	var insertComponentsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			sendSQLResults(res,rows)
+			req.conn.release()
+		}
+	}
+
+	var insertCustomModelCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			if(components == ''){ //there are no component models to associate with the custom model (components is an array if there are component models)
+				sendSQLResults(res,rows)
+				req.conn.release()
+			} else {
+				insertId = rows.insertId
+				var numComponents = components.length
+				//insert multiple rows in one query
+				query = 'INSERT INTO custom_model_composed_of_model (custom_model_id,model_id) VALUES '
+				queryParams = []
+				//for each value in the components array, add escaped values to the query
+				for(var i=0;i<numComponents;i+=1){
+					query += '(?,?)'
+					//add commas if not the last entry
+					if(i != numComponents-1){
+						query += ', '
+					}
+					queryParams.push(insertId)
+					queryParams.push(components[i])
+				}
+				//console.log(query)
+				req.conn.query(query,queryParams,insertComponentsCallback)
+			}
+		}
+	}
+
+	var getCustomModelColumnsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			//build the custom model's details
+			buildDetails(rows,modelDetails,body)
+			keys = []
+			values = []
+			getKeyValues(modelDetails,keys,values)
+			//insert the custom model
+			query = 'INSERT INTO custom_model (??) VALUES (?)'
+			queryParams = []
+			queryParams.push(keys)
+			queryParams.push(values)
+			req.conn.query(query,queryParams,insertCustomModelCallback)
+		}
+	}
+
+	//determine the columns/attributes of the custom_model table
+	query = 'SHOW COLUMNS FROM custom_model'
+	queryParams = []
+	req.conn.query(query,queryParams,getCustomModelColumnsCallback)
+}
