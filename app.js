@@ -60,6 +60,7 @@ app.delete('/model/delete/:table/:id',model.deleteModel)
 app.put('/model/update/:id',model.updateModel)
 app.put('/model/change-category/:id/category/:category_id',model.changeCategory)
 app.post('/model/create-custom',model.createCustomModel)
+app.delete('/model/delete-custom/:id',model.deleteCustomModel)
 
 http.createServer(app).listen(app.get('port'),function(){
 	console.log('Model Collection API Listening on port ' + app.get('port') +'...')
