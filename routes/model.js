@@ -96,23 +96,6 @@ exports.listModels = function(req,res,next){
 	}
 }
 
-exports.listCategories = function(req,res,next){
-	
-	var selectCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			sendSQLResults(res,rows)
-			req.conn.release()
-		}
-	}
-
-	//get the ids and names of all model categories
-	query = 'SELECT id,name FROM category'
-	queryParams = []
-	req.conn.query(query,queryParams,selectCallback)
-}
-
 exports.viewModel = function(req,res,next){
 
 	var modelId = req.params.id
@@ -128,41 +111,27 @@ exports.viewModel = function(req,res,next){
 		req.conn.release()
 	}
 
-	var getCategoryNameCallback = function(err,rows,fields){
+	var getCategoryCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
 		} else {
-			if(rows.length > 0){
+			if(rows.length > 0){ //perform processing only if the mode exists
+				modelCategoryId = rows[0]['id']
 				modelCategoryName = rows[0]['name']
-			}
-			if(modelCategoryName === 'other'){ //if the model falls under the 'other' category, no need to join tables
-				query = 'SELECT * FROM model WHERE id = ?'
-				queryParams = []
-				queryParams.push(modelId)
-				req.conn.query(query,queryParams,selectCallback)
-			} else { //join the model's data with its specific category data
-				query = 'SELECT * FROM model INNER JOIN ?? ON model.id = ' + modelCategoryName + '.model_id WHERE model.id = ?'
-				queryParams = []
-				queryParams.push(modelCategoryName)
-				queryParams.push(modelId)
-				req.conn.query(query,queryParams,selectCallback)
-			}
-		}
-	}
 
-	var getCategoryIdCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			if(rows.length > 0){ //process only if the model exists
-				//get the id of the category from the previous query
-				modelCategoryId = rows[0]['category_id']
-				//find the name of the category based on the id
-				query = 'SELECT name FROM category WHERE id = ?'
-				queryParams = []
-				queryParams.push(modelCategoryId)
-				req.conn.query(query,queryParams,getCategoryNameCallback)
-			} else { //if the model does not exist, stop processing, return an error and release the connection
+				if(modelCategoryName === 'other'){ //no need to join to specific category table
+					query = 'SELECT * FROM model WHERE id = ?'
+					queryParams = []
+					queryParams.push(modelId)
+					req.conn.query(query,queryParams,selectCallback)
+				} else { //join to corresponding category table
+					query = 'SELECT * FROM model INNER JOIN ?? ON model.id = ' + modelCategoryName + '.model_id WHERE id = ?'
+					queryParams = []
+					queryParams.push(modelCategoryName)
+					queryParams.push(modelId)
+					req.conn.query(query,queryParams,selectCallback)
+				}
+			} else { //return an error state when the model was not found
 				res.status = 500
 				res.json({
 					success : false,
@@ -173,11 +142,13 @@ exports.viewModel = function(req,res,next){
 		}
 	}
 
+	var columns = ['id','name']
 	//find the category that the model falls under (will return an empty result if the model does not exist)
-	query = 'SELECT category_id FROM model_has_category WHERE model_id = ?'
+	query = 'SELECT ?? FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
 	queryParams = []
+	queryParams.push(columns)
 	queryParams.push(modelId)
-	req.conn.query(query,queryParams,getCategoryIdCallback)
+	req.conn.query(query,queryParams,getCategoryCallback)
 }
 
 exports.createModel = function(req,res,next){
@@ -281,7 +252,6 @@ exports.createModel = function(req,res,next){
 	query = 'SHOW COLUMNS from model'
 	queryParams = []
 	req.conn.query(query,queryParams,getColumnsCallback) 
-
 }
 
 exports.deleteModel = function(req,res,next){
@@ -348,7 +318,6 @@ exports.deleteModel = function(req,res,next){
 	queryParams = []
 	queryParams.push(id)
 	req.conn.query(query,queryParams,getCategoryCallback)
-
 }
 
 exports.updateModel = function(req,res,next){
@@ -557,6 +526,9 @@ exports.changeCategory = function(req,res,next){
 	req.conn.query(query,queryParams,getCategoryCallback)
 }
 
+exports.viewCustomModel = function(req,res,next){
+}
+
 exports.createCustomModel = function(req,res,next){
 	var body = req.body
 	var modelDetails = {}
@@ -656,4 +628,42 @@ exports.deleteCustomModel = function(req,res,next){
 	queryParams = []
 	queryParams.push(customModelId)
 	req.conn.query(query,queryParams,deleteComponentsCallback)
+}
+
+exports.updateCustomModel = function(req,res,next){
+}
+
+exports.listCategories = function(req,res,next){
+	
+	var selectCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			sendSQLResults(res,rows)
+			req.conn.release()
+		}
+	}
+
+	//get the ids and names of all model categories
+	query = 'SELECT id,name FROM category'
+	queryParams = []
+	req.conn.query(query,queryParams,selectCallback)
+}
+
+exports.listModelColumns = function(req,res,next){
+	var table = req.params.table
+
+	var getModelColumnsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			sendSQLResults(res,rows)
+			req.conn.release()
+		}
+	}
+
+	query = 'SHOW COLUMNS FROM ??'
+	queryParams = []
+	queryParams.push(table)
+	req.conn.query(query,queryParams,getModelColumnsCallback)
 }
