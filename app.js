@@ -65,6 +65,7 @@ app.get('/custom-model/view/:id',model.viewCustomModel)
 app.post('/custom-model/create',model.createCustomModel)
 app.delete('/custom-model/delete/:id',model.deleteCustomModel)
 app.put('/custom-model/update/:id',model.updateCustomModel)
+app.post('/custom-model/:id/components/:action',model.editComponents)
 
 app.get('/categories/view',category.listCategories)
 

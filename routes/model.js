@@ -53,6 +53,26 @@ var getKeyValues = function(object,keys,values){
 	}
 }
 
+/*
+	Removes duplicate elements from an array
+
+	Parameters:
+
+	source 			-- the original array (must be homogenous)
+	result          -- the resultant array where the duplicates are removed (must be empty before function call)
+*/
+var removeDuplicates = function(source,result){
+	source.sort()
+	var length = source.length
+	var compareElement = ''
+	for(var i=0;i<length;i+=1){
+		if(source[i] != compareElement){
+			result.push(source[i])
+			compareElement = source[i]
+		}
+	}
+}
+
 exports.listModels = function(req,res,next){
 	var category = req.params.category
 	var categoryId
@@ -717,6 +737,77 @@ exports.updateCustomModel = function(req,res,next){
 	queryParams = []
 	queryParams.push('custom_model')
 	req.conn.query(query,queryParams,getCustomModelColumnsCallback)
+}
+
+exports.editComponents = function(req,res,next){
+	var customModelId = req.params.id
+	var action = req.params.action
+	var components = []
+
+	if('components' in req.body){
+		if(req.body.components instanceof Array){
+			//if 'components' in the body is an array, remove possible duplicates
+			removeDuplicates(req.body.components,components)
+		} else {
+			//if 'components' is a single value, push the value to the components variable to make it an array
+			components.push(req.body.components)
+		}
+	}
+
+	var length = components.length
+
+	var editComponentsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			sendSQLResults(res,rows)
+			req.conn.release()
+		}
+	}
+
+	if(length > 0){
+		if(action === 'add'){
+			//to declare a model as a component of the custom_model, insert into the custom_model_composed_of_model table
+			query = 'INSERT INTO ?? (custom_model_id,model_id) VALUES '
+			queryParams = []
+			queryParams.push('custom_model_composed_of_model')
+			for(var i=0;i<length;i+=1){
+				query += '(?,?)'
+				if(i != length-1){
+					query += ', '
+				}
+				queryParams.push(customModelId)
+				queryParams.push(components[i])
+			}
+			//add this line to prevent the entire query from failing when there are duplicate inserts
+			query += ' ON DUPLICATE KEY UPDATE model_id = model_id'
+			req.conn.query(query,queryParams,editComponentsCallback)
+		} else if(action === 'remove'){
+			//remove the component entry from the table
+			query = 'DELETE FROM ?? WHERE custom_model_id = ? AND model_id IN (?)'
+			queryParams = []
+			queryParams.push('custom_model_composed_of_model')
+			queryParams.push(customModelId)
+			queryParams.push(components)
+			req.conn.query(query,queryParams,editComponentsCallback)
+		} else {
+			//respond with an error if anything other than add or remove was set as the action parameter
+			res.status = 500
+			res.json({
+				success : false,
+				error : 'INVALID_ACTION'	
+			})
+			req.conn.release()
+		}
+	} else {
+		//respond with an error if there were no components passed in the request body
+		res.status = 500
+		res.json({
+			success : false,
+			error : 'NOTHING_TO_CHANGE'	
+		})
+		req.conn.release()
+	}
 }
 
 exports.listModelColumns = function(req,res,next){
