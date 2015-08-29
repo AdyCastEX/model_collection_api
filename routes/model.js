@@ -534,8 +534,12 @@ exports.createCustomModel = function(req,res,next){
 	var modelDetails = {}
 	var keys = []
 	var values = []
-	var components = body.components
+	var components = ''
 	var insertId
+
+	if(components in body){
+		components = body.components
+	}
 
 	var insertComponentsCallback = function(err,rows,fields){
 		if(err){
@@ -631,6 +635,39 @@ exports.deleteCustomModel = function(req,res,next){
 }
 
 exports.updateCustomModel = function(req,res,next){
+	var body = req.body
+	var customModelId = req.params.id
+	var customModelDetails = {}
+
+	var updateCustomModelCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			sendSQLResults(res,rows)
+			req.conn.release()
+		}
+	}
+
+	var getCustomModelColumnsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			customModelDetails = {}
+			buildDetails(rows,customModelDetails,body)
+
+			query = 'UPDATE ?? SET ? WHERE id = ?'
+			queryParams = []
+			queryParams.push('custom_model')
+			queryParams.push(customModelDetails)
+			queryParams.push(customModelId)
+			req.conn.query(query,queryParams,updateCustomModelCallback)
+		}
+	}
+
+	query = 'SHOW COLUMNS FROM ??'
+	queryParams = []
+	queryParams.push('custom_model')
+	req.conn.query(query,queryParams,getCustomModelColumnsCallback)
 }
 
 exports.listCategories = function(req,res,next){
