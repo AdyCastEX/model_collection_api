@@ -44,6 +44,7 @@ app.set('port',5050)
 //import modules
 var account = require('./routes/account.js')
 var model = require('./routes/model.js')
+var category = require('./routes/category.js')
 var middleware = require('./middleware')
 
 //add middleware that will be used in all endpoints
@@ -52,7 +53,6 @@ app.use(bodyParser.json())
 app.use(middleware.createConnection)
 
 app.get('/models/view/:category',model.listModels)
-app.get('/models/category',model.listCategories)
 
 app.get('/model/view/:id',model.viewModel)
 app.post('/model/create',model.createModel)
@@ -65,6 +65,8 @@ app.get('/custom-model/view/:id',model.viewCustomModel)
 app.post('/custom-model/create',model.createCustomModel)
 app.delete('/custom-model/delete/:id',model.deleteCustomModel)
 app.put('/custom-model/update/:id',model.updateCustomModel)
+
+app.get('/categories/view',category.listCategories)
 
 http.createServer(app).listen(app.get('port'),function(){
 	console.log('Model Collection API Listening on port ' + app.get('port') +'...')
