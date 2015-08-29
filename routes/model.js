@@ -527,6 +527,55 @@ exports.changeCategory = function(req,res,next){
 }
 
 exports.viewCustomModel = function(req,res,next){
+	var customModelId = req.params.id
+	var result
+
+	var getComponentsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			//since only one result is expected, set the first index to store the components
+			result[0]['components'] = rows
+			sendSQLResults(res,result)
+			req.conn.release()
+		}
+	}
+
+	var selectCustomModelCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			if(rows.length > 0){ //process if model exists
+				result = rows
+				columns = ['id','name','status']
+				//get the component models of the custom model
+				query = 'SELECT ?? FROM ?? INNER JOIN ?? ON ??.model_id = ??.id WHERE ??.custom_model_id = ?'
+				queryParams = []
+				queryParams.push(columns)
+				queryParams.push('custom_model_composed_of_model')
+				queryParams.push('model')
+				queryParams.push('custom_model_composed_of_model')
+				queryParams.push('model')
+				queryParams.push('custom_model_composed_of_model')
+				queryParams.push(customModelId)
+				req.conn.query(query,queryParams,getComponentsCallback)
+			} else { //return an error state if the model was not found
+				res.status = 500
+				res.json({
+					success : false,
+					error : 'MODEL_NOT_FOUND'
+				})
+				req.conn.release()
+			}
+		}
+	}
+
+	//find the model from the custom_model table
+	query = 'SELECT * FROM ?? WHERE id = ?'
+	queryParams = []
+	queryParams.push('custom_model')
+	queryParams.push(customModelId)
+	req.conn.query(query,queryParams,selectCustomModelCallback)
 }
 
 exports.createCustomModel = function(req,res,next){
@@ -668,23 +717,6 @@ exports.updateCustomModel = function(req,res,next){
 	queryParams = []
 	queryParams.push('custom_model')
 	req.conn.query(query,queryParams,getCustomModelColumnsCallback)
-}
-
-exports.listCategories = function(req,res,next){
-	
-	var selectCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			sendSQLResults(res,rows)
-			req.conn.release()
-		}
-	}
-
-	//get the ids and names of all model categories
-	query = 'SELECT id,name FROM category'
-	queryParams = []
-	req.conn.query(query,queryParams,selectCallback)
 }
 
 exports.listModelColumns = function(req,res,next){
