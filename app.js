@@ -23,7 +23,7 @@ exports.getConnection = function(callback){
 
 exports.throwSQLError = function(err,res){
 	console.error('There is an error in your SQL Syntax\n',err)
-	res.status = 500
+	res.status(500)
 	res.json({
 		success : false,
 		error : err.code
