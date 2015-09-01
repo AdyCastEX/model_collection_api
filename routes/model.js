@@ -606,7 +606,7 @@ exports.createCustomModel = function(req,res,next){
 	var components = ''
 	var insertId
 
-	if(components in body){
+	if('components' in body){
 		components = body.components
 	}
 
