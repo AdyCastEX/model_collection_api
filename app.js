@@ -60,6 +60,7 @@ app.put('/models/:id',model.updateModel)
 app.put('/models/:id/categories/:category_id',model.changeCategory)
 app.get('/models/columns/:table',model.listModelColumns)
 
+app.get('/custom-models',model.listCustomModels)
 app.get('/custom-models/:id',model.viewCustomModel)
 app.post('/custom-models',model.createCustomModel)
 app.delete('/custom-models/:id',model.deleteCustomModel)
