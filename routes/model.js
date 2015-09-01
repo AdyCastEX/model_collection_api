@@ -588,6 +588,23 @@ exports.changeCategory = function(req,res,next){
 	req.conn.query(query,queryParams,getCategoryCallback)
 }
 
+exports.listCustomModels = function(req,res,next){
+	
+	var getCustomModelsCallback = function(err,rows,fields){
+		if(err){
+			throwSQLError(err,res)
+		} else {
+			sendSQLResults(res,rows)
+		}
+		req.conn.release()
+	}
+
+	query = 'SELECT * FROM ??'
+	queryParams = []
+	queryParams.push('custom_model')
+	req.conn.query(query,queryParams,getCustomModelsCallback)
+}
+
 exports.viewCustomModel = function(req,res,next){
 	var customModelId = req.params.id
 	var result
