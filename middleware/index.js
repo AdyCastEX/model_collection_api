@@ -5,7 +5,7 @@ exports.createConnection = function(req,res,next){
 	var connectCallback = function(err,conn){
 		if(err){
 			console.error('unable to connect\n',err)
-			res.status = 500
+			res.status(500)
 			res.json({
 				success : false,
 				error : err.code

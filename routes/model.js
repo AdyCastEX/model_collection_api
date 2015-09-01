@@ -81,14 +81,16 @@ exports.listModels = function(req,res,next){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			res.status(200)
 			sendSQLResults(res,rows)
-			req.conn.release()
 		}
+		req.conn.release()
 	}
 
 	var getCategoryIdCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			//get the categoryId from the result of the previous query
 			categoryId = rows[0]['id']
@@ -126,6 +128,7 @@ exports.viewModel = function(req,res,next){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			res.status(200)
 			sendSQLResults(res,rows)
 		}
 		req.conn.release()
@@ -134,6 +137,7 @@ exports.viewModel = function(req,res,next){
 	var getCategoryCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			if(rows.length > 0){ //perform processing only if the mode exists
 				modelCategoryId = rows[0]['id']
@@ -152,7 +156,7 @@ exports.viewModel = function(req,res,next){
 					req.conn.query(query,queryParams,selectCallback)
 				}
 			} else { //return an error state when the model was not found
-				res.status = 500
+				res.status(404)
 				res.json({
 					success : false,
 					error : 'MODEL_NOT_FOUND'
@@ -184,14 +188,16 @@ exports.createModel = function(req,res,next){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			res.status(201)
 			sendSQLResults(res,rows)
-			req.conn.release()
 		}
+		req.conn.release()
 	}
 
 	var insertSpecificModelCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			//set the category of the model by inserting into the model_has_category table
 			query = 'INSERT INTO model_has_category (model_id,category_id) VALUES (?,(SELECT id FROM category WHERE name = ?))'
@@ -205,6 +211,7 @@ exports.createModel = function(req,res,next){
 	var getSpecificColumnsCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			//build the details of specific category
 			buildDetails(rows,specificDetails,body)
@@ -227,6 +234,7 @@ exports.createModel = function(req,res,next){
 	var insertModelCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			//set insertId as the id of the last row inserted to the model table
 			insertId = rows.insertId
@@ -250,6 +258,7 @@ exports.createModel = function(req,res,next){
 	var getColumnsCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 
 			//map the model details to the values in the request body
@@ -283,14 +292,16 @@ exports.deleteModel = function(req,res,next){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			res.status(204)
 			sendSQLResults(res,rows)
-			req.conn.release()
 		}
+		req.conn.release()
 	}
 
 	var removeCategoryCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else { //delete the model from the specified table (model or custom_model)
 			query = 'DELETE FROM ?? WHERE id = ?'
 			queryParams = []
@@ -303,6 +314,7 @@ exports.deleteModel = function(req,res,next){
 	var removeSpecificModelCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else { //delete the model from the model_has_category table
 			query = 'DELETE FROM model_has_category WHERE model_id = ?'
 			queryParams = []
@@ -314,21 +326,31 @@ exports.deleteModel = function(req,res,next){
 	var getCategoryCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
-			//identify the category name from the result of the previous query
-			category = rows[0]['name']
+			if(rows.length > 0){
+				//identify the category name from the result of the previous query
+				category = rows[0]['name']
 
-			if(category === 'other'){ //if in 'other' category, proceed to deleting the model from the model_has_category table
-				query = 'DELETE FROM model_has_category WHERE model_id = ?'
-				queryParams = []
-				queryParams.push(id)
-				req.conn.query(query,queryParams,removeCategoryCallback)
-			} else { //else delete the model from the specific category table first
-				query = 'DELETE FROM ?? WHERE model_id = ?'
-				queryParams = []
-				queryParams.push(category)
-				queryParams.push(id)
-				req.conn.query(query,queryParams,removeSpecificModelCallback)
+				if(category === 'other'){ //if in 'other' category, proceed to deleting the model from the model_has_category table
+					query = 'DELETE FROM model_has_category WHERE model_id = ?'
+					queryParams = []
+					queryParams.push(id)
+					req.conn.query(query,queryParams,removeCategoryCallback)
+				} else { //else delete the model from the specific category table first
+					query = 'DELETE FROM ?? WHERE model_id = ?'
+					queryParams = []
+					queryParams.push(category)
+					queryParams.push(id)
+					req.conn.query(query,queryParams,removeSpecificModelCallback)
+				}
+			} else {
+				res.status(404)
+				res.json({
+					success : false,
+					error : 'MODEL_NOT_FOUND'
+				})
+				req.conn.release()
 			}
 		}
 	}
@@ -350,14 +372,16 @@ exports.updateModel = function(req,res,next){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			res.status(200)
 			sendSQLResults(res,rows)
-			req.conn.release()
 		}
+		req.conn.release()
 	}
 
 	var getColumnsCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			modelDetails = {}
 			//build the model details to update
@@ -374,6 +398,7 @@ exports.updateModel = function(req,res,next){
 	var updateSpecificModelCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			query = 'SHOW COLUMNS FROM model'
 			queryParams = []
@@ -384,6 +409,7 @@ exports.updateModel = function(req,res,next){
 	var getSpecificColumnsCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			modelDetails = {}
 			//build the model details to update
@@ -401,19 +427,29 @@ exports.updateModel = function(req,res,next){
 	var getCategoryCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			//get the category from the result of the previous query
-			category = rows[0]['name']
+			if(rows.length > 0){
+				category = rows[0]['name']
 
-			if(category === 'other'){ //if the model falls under the 'other' category, update only the model table
-				query = 'SHOW COLUMNS FROM model'
-				queryParams = []
-				req.conn.query(query,queryParams,getColumnsCallback)
-			} else { //else update the table of the specific model category
-				query = 'SHOW COLUMNS FROM ??'
-				queryParams = []
-				queryParams.push(category)
-				req.conn.query(query,queryParams,getSpecificColumnsCallback)
+				if(category === 'other'){ //if the model falls under the 'other' category, update only the model table
+					query = 'SHOW COLUMNS FROM model'
+					queryParams = []
+					req.conn.query(query,queryParams,getColumnsCallback)
+				} else { //else update the table of the specific model category
+					query = 'SHOW COLUMNS FROM ??'
+					queryParams = []
+					queryParams.push(category)
+					req.conn.query(query,queryParams,getSpecificColumnsCallback)
+				}
+			} else {
+				res.status(404)
+				res.json({
+					success : false,
+					error : 'MODEL_NOT_FOUND'
+				})
+				req.conn.release()
 			}
 		}
 	}
@@ -440,14 +476,16 @@ exports.changeCategory = function(req,res,next){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			res.status(200)
 			sendSQLResults(res,rows)
-			req.conn.release()
 		}
+		req.conn.release()
 	}
 
 	var insertSpecificModelCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else { //change the category of the model in the model_has_category table
 			query = 'UPDATE model_has_category SET category_id = ? WHERE model_id = ?'
 			queryParams = []
@@ -460,6 +498,7 @@ exports.changeCategory = function(req,res,next){
 	var getNewCategoryColumnsCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else { //build details and insert into the specific table of the new category
 			modelDetails = {}
 			buildDetails(rows,modelDetails,body)
@@ -479,6 +518,7 @@ exports.changeCategory = function(req,res,next){
 	var getNewCategoryNameCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			newCategoryName = rows[0]['name']
 
@@ -500,6 +540,7 @@ exports.changeCategory = function(req,res,next){
 	var deleteSpecificModelCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else { //determine the name of the model's new category
 			query = 'SELECT name FROM category WHERE id = ?'
 			queryParams = []
@@ -511,6 +552,7 @@ exports.changeCategory = function(req,res,next){
 	var getCategoryCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {	
 			categoryId = rows[0]['id']
 			categoryName = rows[0]['name']
@@ -556,14 +598,16 @@ exports.viewCustomModel = function(req,res,next){
 		} else {
 			//since only one result is expected, set the first index to store the components
 			result[0]['components'] = rows
+			res.status(200)
 			sendSQLResults(res,result)
-			req.conn.release()
 		}
+		req.conn.release()
 	}
 
 	var selectCustomModelCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			if(rows.length > 0){ //process if model exists
 				result = rows
@@ -580,7 +624,7 @@ exports.viewCustomModel = function(req,res,next){
 				queryParams.push(customModelId)
 				req.conn.query(query,queryParams,getComponentsCallback)
 			} else { //return an error state if the model was not found
-				res.status = 500
+				res.status(404)
 				res.json({
 					success : false,
 					error : 'MODEL_NOT_FOUND'
@@ -614,14 +658,16 @@ exports.createCustomModel = function(req,res,next){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			res.status(201)
 			sendSQLResults(res,rows)
-			req.conn.release()
 		}
+		req.conn.release()
 	}
 
 	var insertCustomModelCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			if(components == ''){ //there are no component models to associate with the custom model (components is an array if there are component models)
 				sendSQLResults(res,rows)
@@ -651,6 +697,7 @@ exports.createCustomModel = function(req,res,next){
 	var getCustomModelColumnsCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			//build the custom model's details
 			buildDetails(rows,modelDetails,body)
@@ -679,14 +726,16 @@ exports.deleteCustomModel = function(req,res,next){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			res.status(204)
 			sendSQLResults(res,rows)
-			req.conn.release()
 		}
+		req.conn.release()
 	}
 
 	var deleteComponentsCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			//delete the custom model
 			query = 'DELETE FROM custom_model WHERE id = ?'
@@ -712,14 +761,16 @@ exports.updateCustomModel = function(req,res,next){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			res.status(200)
 			sendSQLResults(res,rows)
-			req.conn.release()
 		}
+		req.conn.release()
 	}
 
 	var getCustomModelColumnsCallback = function(err,rows,fields){
 		if(err){
 			throwSQLError(err,res)
+			req.conn.release()
 		} else {
 			customModelDetails = {}
 			buildDetails(rows,customModelDetails,body)
@@ -760,9 +811,10 @@ exports.editComponents = function(req,res,next){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			res.status(200)
 			sendSQLResults(res,rows)
-			req.conn.release()
 		}
+		req.conn.release()
 	}
 
 	if(length > 0){
@@ -817,13 +869,14 @@ exports.listModelColumns = function(req,res,next){
 		if(err){
 			throwSQLError(err,res)
 		} else {
+			res.status(200)
 			sendSQLResults(res,rows)
-			req.conn.release()
 		}
+		req.conn.release()
 	}
 
 	query = 'SHOW COLUMNS FROM ??'
 	queryParams = []
 	queryParams.push(table)
 	req.conn.query(query,queryParams,getModelColumnsCallback)
-}
+}	
