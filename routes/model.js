@@ -1,77 +1,11 @@
 var shared = require('../app.js')
+var utils = require('../helpers/utils.js')
 
 var throwSQLError = shared.throwSQLError
 var sendSQLResults = shared.sendSQLResults
 
 var query = ''
 var queryParams = []
-
-/*
- 	Creates a json object that maps table columns(keys) to attributes(values) in a request body
- 	
- 	Parameters:
-
- 	rows             -- the resulting rows of an SQL query that fetches a table's column details
- 	details          -- the json object that will contain the keys and values
- 	body             -- a json object that contains attributes from a request body  
-*/
-var buildDetails = function(rows,details,body){
-	var rowLength = rows.length
-	var field
-
-	for(var i=0;i<rowLength;i+=1){
-		//since the row contains more details, get only the field which is the column name
-		field = rows[i]['Field']
-		//add the field to the details only if it can be found in the body
-		if(field in body){
-			if(body[field] === ''){
-				//replace blank fields with a null value
-				details[field] = null
-			} else {
-				//map the column to the corresponding value in the request body
-				details[field] = body[field]
-			}
-		}
-	}
-}
-
-/*
-	Gets the keys and values of a json object
-
-	Parameters:
-
-	object            -- the json object to process
-	keys              -- an array where the keys will be stored
-	values            -- an array where the values will be stored	
-*/
-var getKeyValues = function(object,keys,values){
-	
-	//traverse through all the keys in the object
-	for(key in object){
-		keys.push(key)
-		values.push(object[key])
-	}
-}
-
-/*
-	Removes duplicate elements from an array
-
-	Parameters:
-
-	source 			-- the original array (must be homogenous)
-	result          -- the resultant array where the duplicates are removed (must be empty before function call)
-*/
-var removeDuplicates = function(source,result){
-	source.sort()
-	var length = source.length
-	var compareElement = ''
-	for(var i=0;i<length;i+=1){
-		if(source[i] != compareElement){
-			result.push(source[i])
-			compareElement = source[i]
-		}
-	}
-}
 
 exports.listModels = function(req,res,next){
 	var category = req.params.category
@@ -214,12 +148,12 @@ exports.createModel = function(req,res,next){
 			req.conn.release()
 		} else {
 			//build the details of specific category
-			buildDetails(rows,specificDetails,body)
+			utils.buildDetails(rows,specificDetails,body)
 			//override the NULL model_id field as the id of the last inserted model
 			specificDetails['model_id']  = insertId
 			keys = []
 			values = []
-			getKeyValues(specificDetails,keys,values)
+			utils.getKeyValues(specificDetails,keys,values)
 
 			//insert into the specific category table
 			query = 'INSERT INTO ?? (??) VALUES (?)'
@@ -262,10 +196,10 @@ exports.createModel = function(req,res,next){
 		} else {
 
 			//map the model details to the values in the request body
-			buildDetails(rows,modelDetails,body)
+			utils.buildDetails(rows,modelDetails,body)
 			keys = []
 			values = []
-			getKeyValues(modelDetails,keys,values)
+			utils.getKeyValues(modelDetails,keys,values)
 			//console.log(modelDetails)
 
 			//insert the model based on the model details
@@ -385,7 +319,7 @@ exports.updateModel = function(req,res,next){
 		} else {
 			modelDetails = {}
 			//build the model details to update
-			buildDetails(rows,modelDetails,body)
+			utils.buildDetails(rows,modelDetails,body)
 			//update the model
 			query = 'UPDATE model SET ? WHERE id = ?'
 			queryParams = []
@@ -413,7 +347,7 @@ exports.updateModel = function(req,res,next){
 		} else {
 			modelDetails = {}
 			//build the model details to update
-			buildDetails(rows,modelDetails,body)
+			utils.buildDetails(rows,modelDetails,body)
 			//update the model specified by model_id
 			query = 'UPDATE ?? SET ? WHERE model_id = ?'
 			queryParams = []
@@ -501,11 +435,11 @@ exports.changeCategory = function(req,res,next){
 			req.conn.release()
 		} else { //build details and insert into the specific table of the new category
 			modelDetails = {}
-			buildDetails(rows,modelDetails,body)
+			utils.buildDetails(rows,modelDetails,body)
 			modelDetails['model_id'] = modelId
 			keys = []
 			values = []
-			getKeyValues(modelDetails,keys,values)
+			utils.getKeyValues(modelDetails,keys,values)
 			query = 'INSERT INTO ?? (??) VALUES (?)'
 			queryParams = []
 			queryParams.push(newCategoryName)
@@ -717,10 +651,10 @@ exports.createCustomModel = function(req,res,next){
 			req.conn.release()
 		} else {
 			//build the custom model's details
-			buildDetails(rows,modelDetails,body)
+			utils.buildDetails(rows,modelDetails,body)
 			keys = []
 			values = []
-			getKeyValues(modelDetails,keys,values)
+			utils.getKeyValues(modelDetails,keys,values)
 			//insert the custom model
 			query = 'INSERT INTO custom_model (??) VALUES (?)'
 			queryParams = []
@@ -790,7 +724,7 @@ exports.updateCustomModel = function(req,res,next){
 			req.conn.release()
 		} else {
 			customModelDetails = {}
-			buildDetails(rows,customModelDetails,body)
+			utils.buildDetails(rows,customModelDetails,body)
 
 			query = 'UPDATE ?? SET ? WHERE id = ?'
 			queryParams = []
@@ -815,7 +749,7 @@ exports.editComponents = function(req,res,next){
 	if('components' in req.body){
 		if(req.body.components instanceof Array){
 			//if 'components' in the body is an array, remove possible duplicates
-			removeDuplicates(req.body.components,components)
+			utils.removeDuplicates(req.body.components,components)
 		} else {
 			//if 'components' is a single value, push the value to the components variable to make it an array
 			components.push(req.body.components)
