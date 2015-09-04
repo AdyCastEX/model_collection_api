@@ -69,8 +69,10 @@ app.post('/custom-models/:id/components/:action',model.editComponents)
 
 app.get('/categories',category.listCategories)
 
-app.get('/accounts/:id',account.viewAccount)
-app.post('/accounts',account.createAccount)
+app.get('/accounts/:id',account.viewUser)
+app.post('/accounts',account.createUser)
+app.delete('/accounts/:id',account.deleteUser)
+app.put('/accounts/:id',account.updateUser)
 
 http.createServer(app).listen(app.get('port'),function(){
 	console.log('Model Collection API Listening on port ' + app.get('port') +'...')
