@@ -1,8 +1,10 @@
 var shared = require('../app.js')
 var utils = require('../helpers/utils.js')
 
-var throwSQLError = shared.throwSQLError
-var sendSQLResults = shared.sendSQLResults
+//var throwSQLError = shared.throwSQLError
+//var sendSQLResults = shared.sendSQLResults
+
+var db = require('../helpers/db.js')
 
 var query = ''
 var queryParams = []
@@ -11,29 +13,24 @@ exports.listModels = function(req,res,next){
 	var category = req.params.category
 	var categoryId
 
-	var selectCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			res.status(200)
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
+	//save the request and response objects as attributes of the throwSQLError() function so that they can be accessed within its function call
+	db.throwSQLError.req = req
+	db.throwSQLError.res = res
+
+	var getCategoryId = function(rows,fields){
+		//get the categoryId from the result of the previous query
+		categoryId = rows[0]['id']
+		//join the model and its category and select all the models that fall under the specified category
+		query = 'SELECT * FROM model INNER JOIN model_has_category ON model.id = model_has_category.model_id WHERE model_has_category.category_id = ?'
+		queryParams = []
+		queryParams.push(categoryId)
+		return req.conn.query(query,queryParams)
 	}
 
-	var getCategoryIdCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
-			//get the categoryId from the result of the previous query
-			categoryId = rows[0]['id']
-			//join the model and its category and select all the models that fall under the specified category
-			query = 'SELECT * FROM model INNER JOIN model_has_category ON model.id = model_has_category.model_id WHERE model_has_category.category_id = ?'
-			queryParams = []
-			queryParams.push(categoryId)
-			req.conn.query(query,queryParams,selectCallback)
-		}
+	var getModels = function(rows,fields){
+		res.status(200)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
 	}
 
 	//model does not fall under a specific category
@@ -42,14 +39,18 @@ exports.listModels = function(req,res,next){
 		query = 'SELECT id FROM category WHERE name = ?'
 		queryParams = []
 		queryParams.push(category)
-		req.conn.query(query,queryParams,getCategoryIdCallback)
+		req.conn.query(query,queryParams)
+				.then(getCategoryId,db.throwSQLError)
+				.then(getModels,db.throwSQLError)
 	} else{
 		//find all models that fall under a particular category
 		query = 'SELECT * FROM model INNER JOIN ?? ON model.id = ' + category + '.model_id'
 		queryParams = []
 		queryParams.push(category)
-		req.conn.query(query,queryParams,selectCallback)
+		req.conn.query(query,queryParams)
+				.then(getModels,db.throwSQLError)
 	}
+
 }
 
 exports.viewModel = function(req,res,next){
