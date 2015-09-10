@@ -1,10 +1,7 @@
 var shared = require('../app.js')
 var utils = require('../helpers/utils.js')
-
-//var throwSQLError = shared.throwSQLError
-//var sendSQLResults = shared.sendSQLResults
-
 var db = require('../helpers/db.js')
+var err = require('../helpers/error.js')
 
 var query = ''
 var queryParams = []
@@ -13,11 +10,27 @@ exports.listModels = function(req,res,next){
 	var category = req.params.category
 	var categoryId
 
-	//save the request and response objects as attributes of the throwSQLError() function so that they can be accessed within its function call
-	db.throwSQLError.req = req
-	db.throwSQLError.res = res
+	//save the request and response objects as attributes of the throwError() function so that they can be accessed within its function call
+	db.throwError.req = req
+	db.throwError.res = res
 
-	var getCategoryId = function(rows,fields){
+	var getOtherCategory = function(){
+		//find the id of the 'other' category
+		query = 'SELECT id FROM category WHERE name = ?'
+		queryParams = []
+		queryParams.push(category)
+		return req.conn.query(query,queryParams)
+	}
+
+	var getSpecificModels = function(){
+		//find all models that fall under a particular category
+		query = 'SELECT * FROM model INNER JOIN ?? ON model.id = ' + category + '.model_id'
+		queryParams = []
+		queryParams.push(category)
+		return req.conn.query(query,queryParams)
+	}
+
+	var getModels = function(rows,fields){
 		//get the categoryId from the result of the previous query
 		categoryId = rows[0]['id']
 		//join the model and its category and select all the models that fall under the specified category
@@ -27,7 +40,7 @@ exports.listModels = function(req,res,next){
 		return req.conn.query(query,queryParams)
 	}
 
-	var getModels = function(rows,fields){
+	var sendResults = function(rows,fields){
 		res.status(200)
 		db.sendSQLResults(res,rows)
 		req.conn.end()
@@ -35,20 +48,12 @@ exports.listModels = function(req,res,next){
 
 	//model does not fall under a specific category
 	if(category === 'other'){
-		//find the id of the 'other' category
-		query = 'SELECT id FROM category WHERE name = ?'
-		queryParams = []
-		queryParams.push(category)
-		req.conn.query(query,queryParams)
-				.then(getCategoryId,db.throwSQLError)
-				.then(getModels,db.throwSQLError)
+		getOtherCategory()
+			.then(getModels)
+			.done(sendResults,db.throwError)
 	} else{
-		//find all models that fall under a particular category
-		query = 'SELECT * FROM model INNER JOIN ?? ON model.id = ' + category + '.model_id'
-		queryParams = []
-		queryParams.push(category)
-		req.conn.query(query,queryParams)
-				.then(getModels,db.throwSQLError)
+		getSpecificModels()
+			.done(sendResults,db.throwError)
 	}
 
 }
@@ -58,10 +63,20 @@ exports.viewModel = function(req,res,next){
 	var modelCategoryId = ''
 	var modelCategoryName = ''
 
-	db.throwSQLError.req = req
-	db.throwSQLError.res = res
+	db.throwError.req = req
+	db.throwError.res = res
 
-	var getCategory = function(rows,fields){
+	var getCategory = function(){
+		var columns = ['id','name']
+		//find the category that the model falls under (will return an empty result if the model does not exist)
+		query = 'SELECT ?? FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
+		queryParams = []
+		queryParams.push(columns)
+		queryParams.push(modelId)
+		return req.conn.query(query,queryParams)
+	}
+
+	var getModel = function(rows,fields){
 		if(rows.length > 0){ //perform processing only if the mode exists
 			modelCategoryId = rows[0]['id']
 			modelCategoryName = rows[0]['name']
@@ -70,37 +85,29 @@ exports.viewModel = function(req,res,next){
 				query = 'SELECT * FROM model WHERE id = ?'
 				queryParams = []
 				queryParams.push(modelId)
-				req.conn.query(query,queryParams).then(getModel,db.throwSQLError)
+				return req.conn.query(query,queryParams)
 			} else { //join to corresponding category table
 				query = 'SELECT * FROM model INNER JOIN ?? ON model.id = ' + modelCategoryName + '.model_id WHERE id = ?'
 				queryParams = []
 				queryParams.push(modelCategoryName)
 				queryParams.push(modelId)
-				req.conn.query(query,queryParams).then(getModel,db.throwSQLError)
+				return req.conn.query(query,queryParams)
 			}
-		} else { //return an error state when the model was not found
+		} else { //throw an error state when the model was not found
 			res.status(404)
-			res.json({
-				success : false,
-				error : 'MODEL_NOT_FOUND'
-			})
-			req.conn.end()
+			throw err.generateModelNotFoundError(modelId)
 		}
 	}
 
-	var getModel = function(rows,fields){
+	var sendResults = function(rows,fields){
 		res.status(200)
 		db.sendSQLResults(res,rows)
 		req.conn.end()
 	}
 
-	var columns = ['id','name']
-	//find the category that the model falls under (will return an empty result if the model does not exist)
-	query = 'SELECT ?? FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
-	queryParams = []
-	queryParams.push(columns)
-	queryParams.push(modelId)
-	req.conn.query(query,queryParams).then(getCategory,db.throwSQLError)
+	getCategory()
+		.then(getModel)
+		.done(sendResults,db.throwError)
 			
 }
 
@@ -112,17 +119,39 @@ exports.createModel = function(req,res,next){
 	var values
 	var category = body['category']
 	var insertId = ''
+	var categoryId = ''
 
-	db.throwSQLError.req = req
-	db.throwSQLError.res = res
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var findCategory = function(){
+		var columns = ['id']
+		query = 'SELECT ?? FROM category WHERE name = ?'
+		queryParams = []
+		queryParams.push(columns)
+		queryParams.push(category)
+		return req.conn.query(query,queryParams)
+	}
 
 	var getColumns = function(rows,fields){
+		//assumes the previous promise was findCategory
+		categoryId = rows[0]['id']
+		if(rows.length > 0){
+			//determine the columns of the model table through this SQL query
+			query = 'SHOW COLUMNS from model'
+			queryParams = []
+			return req.conn.query(query,queryParams)
+		} else {
+			throw err.generateCategoryNotFoundError(category)
+		}
+	}
+
+	var insertModel = function(rows,fields){
 		//map the model details to the values in the request body
 		utils.buildDetails(rows,modelDetails,body)
 		keys = []
 		values = []
 		utils.getKeyValues(modelDetails,keys,values)
-		//console.log(modelDetails)
 
 		//insert the model based on the model details
 		query = 'INSERT INTO model (??) VALUES (?)'
@@ -132,34 +161,20 @@ exports.createModel = function(req,res,next){
 		return req.conn.query(query,queryParams)
 	}
 
-	var insertModel = function(rows,fields){
-		//set insertId as the id of the last row inserted to the model table
+	var getSpecificColumns = function(rows,fields){
+		//assumes the last promise was insertModel
 		insertId = rows.insertId
-
-		if(category === 'other'){ //if the model falls under the 'other' category, go straight to inserting the the model_has_category table
-			//to get the category id, run a subquery 
-			query = 'INSERT INTO model_has_category (model_id,category_id) VALUES (?,(SELECT id FROM category WHERE name = ?))'
-			queryParams = []
-			queryParams.push(insertId)
-			queryParams.push(category)
-			req.conn.query(query,queryParams)
-					.then(insertModelCategory,db.throwSQLError)
-		} else { //else get the columns of the specific category table
-			query = 'SHOW COLUMNS from ??'
-			queryParams = []
-			queryParams.push(category)
-			req.conn.query(query,queryParams)
-					.then(getSpecificColumns)
-					.then(insertSpecificModel)
-					.then(insertModelCategory,db.throwSQLError)
-		}
+		query = 'SHOW COLUMNS from ??'
+		queryParams = []
+		queryParams.push(category)
+		return req.conn.query(query,queryParams)
 	}
 
-	var getSpecificColumns = function(rows,fields){
+	var insertSpecificModel = function(rows,fields){
 		//build the details of specific category
 		utils.buildDetails(rows,specificDetails,body)
 		//override the NULL model_id field as the id of the last inserted model
-		specificDetails['model_id']  = insertId
+		specificDetails['model_id'] = insertId
 		keys = []
 		values = []
 		utils.getKeyValues(specificDetails,keys,values)
@@ -173,27 +188,41 @@ exports.createModel = function(req,res,next){
 		return req.conn.query(query,queryParams)
 	}
 
-	var insertSpecificModel = function(rows,fields){
-		//set the category of the model by inserting into the model_has_category table
-		query = 'INSERTS INTO model_has_category (model_id,category_id) VALUES (?,(SELECT id FROM category WHERE name = ?))'
+	var insertModelCategory = function(rows,fields){
+		//if insertModel was the previous promise, the insertId is the id of the last inserted model 
+		if(rows.insertId != 0){ //if insertSpecificModel was the previous promise, the insertId of that result is 0
+			insertId = rows.insertId
+		}
+		//give the model a category by inserting into the model_has_category table
+		query = 'INSERT INTO model_has_category (model_id,category_id) VALUES (?,?)'
 		queryParams = []
 		queryParams.push(insertId)
-		queryParams.push(category)
+		queryParams.push(categoryId)
 		return req.conn.query(query,queryParams)
 	}
 
-	var insertModelCategory = function(rows,fields){
+	var sendResults = function(rows,fields){
 		res.status(201)
 		db.sendSQLResults(res,rows)
 		req.conn.end()
 	}
 
-	//determine the columns of the model table through this SQL query
-	query = 'SHOW COLUMNS from model'
-	queryParams = []
-	req.conn.query(query,queryParams)
+	if(category === 'other'){
+		findCategory()		
 			.then(getColumns)
-			.then(insertModel,db.throwSQLError) 
+			.then(insertModel)
+			.then(insertModelCategory)
+			.done(sendResults,db.throwError) 
+	} else {
+		findCategory()
+			.then(getColumns)
+			.then(insertModel)
+			.then(getSpecificColumns)
+			.then(insertSpecificModel)
+			.then(insertModelCategory)
+			.done(sendResults,db.throwError) 
+	}
+	
 }
 
 exports.deleteModel = function(req,res,next){

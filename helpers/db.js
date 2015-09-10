@@ -20,11 +20,11 @@ exports.throwConnectionError = function(err){
 	}) 
 }
 
-exports.throwSQLError = function(err){
-	console.error('There is an error in your SQL Syntax\n',err)
+exports.throwError = function(err){
+	console.error('Something went wrong...\n',err)
 	//get the request and response objects which were passed as attributes of this function
-	var res = exports.throwSQLError.res
-	var req = exports.throwSQLError.req
+	var res = exports.throwError.res
+	var req = exports.throwError.req
 	res.status(500)
 	res.json({
 		success : false,
