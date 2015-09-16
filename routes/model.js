@@ -124,7 +124,7 @@ exports.createModel = function(req,res,next){
 	db.throwError.req = req
 	db.throwError.res = res
 
-	var findCategory = function(){
+	var getCategory = function(){
 		var columns = ['id']
 		query = 'SELECT ?? FROM category WHERE name = ?'
 		queryParams = []
@@ -189,8 +189,9 @@ exports.createModel = function(req,res,next){
 	}
 
 	var insertModelCategory = function(rows,fields){
-		//if insertModel was the previous promise, the insertId is the id of the last inserted model 
-		if(rows.insertId != 0){ //if insertSpecificModel was the previous promise, the insertId of that result is 0
+		//if the category is 'other', the previous promise is assumed to be insertModel 
+		if(category === 'other'){
+			//assign the insertId since the id of the previous insert can only be accessed here
 			insertId = rows.insertId
 		}
 		//give the model a category by inserting into the model_has_category table
@@ -208,13 +209,13 @@ exports.createModel = function(req,res,next){
 	}
 
 	if(category === 'other'){
-		findCategory()		
+		getCategory()		
 			.then(getColumns)
 			.then(insertModel)
 			.then(insertModelCategory)
 			.done(sendResults,db.throwError) 
 	} else {
-		findCategory()
+		getCategory()
 			.then(getColumns)
 			.then(insertModel)
 			.then(getSpecificColumns)
@@ -226,181 +227,153 @@ exports.createModel = function(req,res,next){
 }
 
 exports.deleteModel = function(req,res,next){
-	var table = req.params.table
-	var id = req.params.id
+	var modelId = req.params.id
 	var category = ''
 
-	var removeModelCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			res.status(204)
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var getCategory = function(){
+		//find the category (id and name) of the model to delete 
+		query = 'SELECT id, name FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
+		queryParams = []
+		queryParams.push(modelId)
+		return req.conn.query(query,queryParams)
 	}
 
-	var removeCategoryCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else { //delete the model from the specified table (model or custom_model)
-			query = 'DELETE FROM ?? WHERE id = ?'
-			queryParams = []
-			queryParams.push(table)
-			queryParams.push(id)
-			req.conn.query(query,queryParams,removeModelCallback)
-		}
-	}
+	var removeSpecificModelOrCategory = function(rows,fields){
+		if(rows.length > 0){ //process only if the model exists
+			//identify the category name from the result of the previous query (assumes the previous promise was getCategory)
+			category = rows[0]['name']
 
-	var removeSpecificModelCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else { //delete the model from the model_has_category table
-			query = 'DELETE FROM model_has_category WHERE model_id = ?'
-			queryParams = []
-			queryParams.push(id)
-			req.conn.query(query,queryParams,removeCategoryCallback)
-		}
-	}
-
-	var getCategoryCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
-			if(rows.length > 0){
-				//identify the category name from the result of the previous query
-				category = rows[0]['name']
-
-				if(category === 'other'){ //if in 'other' category, proceed to deleting the model from the model_has_category table
-					query = 'DELETE FROM model_has_category WHERE model_id = ?'
-					queryParams = []
-					queryParams.push(id)
-					req.conn.query(query,queryParams,removeCategoryCallback)
-				} else { //else delete the model from the specific category table first
-					query = 'DELETE FROM ?? WHERE model_id = ?'
-					queryParams = []
-					queryParams.push(category)
-					queryParams.push(id)
-					req.conn.query(query,queryParams,removeSpecificModelCallback)
-				}
-			} else {
-				res.status(404)
-				res.json({
-					success : false,
-					error : 'MODEL_NOT_FOUND'
-				})
-				req.conn.release()
+			if(category === 'other'){ //if in 'other' category, go straight to removing the category
+				query = 'DELETE FROM model_has_category WHERE model_id = ?'
+				queryParams = []
+				queryParams.push(modelId)
+				return req.conn.query(query,queryParams)
+			} else { //else delete the model from the specific category table then remove the category
+				query = 'DELETE FROM ?? WHERE model_id = ?'
+				queryParams = []
+				queryParams.push(category)
+				queryParams.push(modelId)
+				return req.conn.query(query,queryParams)
+							   .then(removeCategory)
 			}
+		} else {
+			throw err.generateModelNotFoundError(modelId)
 		}
 	}
 
-	//find the category (id and name) of the model to delete 
-	query = 'SELECT id, name FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
-	queryParams = []
-	queryParams.push(id)
-	req.conn.query(query,queryParams,getCategoryCallback)
+	var removeCategory = function(rows,fields){
+		//remove the category by deleting from the model_has_category table
+		query = 'DELETE FROM model_has_category WHERE model_id = ?'
+		queryParams = []
+		queryParams.push(modelId)
+		return req.conn.query(query,queryParams)
+	}
+
+	var removeModel = function(rows,fields){
+		//delete the model from the model table
+		query = 'DELETE FROM ?? WHERE id = ?'
+		queryParams = []
+		queryParams.push('model')
+		queryParams.push(modelId)
+		return req.conn.query(query,queryParams)
+	}
+
+	var sendResults = function(rows,fields){
+		res.status(204)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+
+	getCategory()
+		.then(removeSpecificModelOrCategory)
+		.then(removeModel)
+		.done(sendResults,db.throwError)
 }
 
 exports.updateModel = function(req,res,next){
 	var body = req.body
-	var id = req.params.id
+	var modelId = req.params.id
 	var category = ''
 	var modelDetails = {}
 
-	var updateModelCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			res.status(200)
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var getCategory = function(){
+		//determine the category of the model
+		query = 'SELECT id, name FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
+		queryParams = []
+		queryParams.push(modelId)
+		return req.conn.query(query,queryParams)
 	}
 
-	var getColumnsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
-			modelDetails = {}
-			//build the model details to update
-			utils.buildDetails(rows,modelDetails,body)
-			//update the model
-			query = 'UPDATE model SET ? WHERE id = ?'
-			queryParams = []
-			queryParams.push(modelDetails)
-			queryParams.push(id)
-			req.conn.query(query,queryParams,updateModelCallback)
-		}
-	}
-
-	var updateSpecificModelCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
-			query = 'SHOW COLUMNS FROM model'
-			queryParams = []
-			req.conn.query(query,queryParams,getColumnsCallback)
-		}
-	}
-
-	var getSpecificColumnsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
-			modelDetails = {}
-			//build the model details to update
-			utils.buildDetails(rows,modelDetails,body)
-			//update the model specified by model_id
-			query = 'UPDATE ?? SET ? WHERE model_id = ?'
-			queryParams = []
-			queryParams.push(category)
-			queryParams.push(modelDetails)
-			queryParams.push(id)
-			req.conn.query(query,queryParams,updateSpecificModelCallback)
-		}
-	}
-
-	var getCategoryCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
+	var getColumns = function(rows,fields){
+		//process only if the previous query if the model exists under the found category
+		if(rows.length > 0){
 			//get the category from the result of the previous query
-			if(rows.length > 0){
-				category = rows[0]['name']
+			category = rows[0]['name']
 
-				if(category === 'other'){ //if the model falls under the 'other' category, update only the model table
-					query = 'SHOW COLUMNS FROM model'
-					queryParams = []
-					req.conn.query(query,queryParams,getColumnsCallback)
-				} else { //else update the table of the specific model category
-					query = 'SHOW COLUMNS FROM ??'
-					queryParams = []
-					queryParams.push(category)
-					req.conn.query(query,queryParams,getSpecificColumnsCallback)
-				}
-			} else {
-				res.status(404)
-				res.json({
-					success : false,
-					error : 'MODEL_NOT_FOUND'
-				})
-				req.conn.release()
+			if(category === 'other'){ //if the model falls under the 'other' category, get only the columns of the model table
+				query = 'SHOW COLUMNS FROM model'
+				queryParams = []
+				return req.conn.query(query,queryParams)
+			} else { //else update the table of the specific model category
+				query = 'SHOW COLUMNS FROM ??'
+				queryParams = []
+				queryParams.push(category)
+				return req.conn.query(query,queryParams)
+							   .then(updateSpecificModel)
+							   .then(getModelColumns)
 			}
+		} else {
+			throw err.generateModelNotFoundError(modelId)
 		}
 	}
 
-	//determine the category of the model
-	query = 'SELECT id, name FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
-	queryParams = []
-	queryParams.push(id)
-	req.conn.query(query,queryParams,getCategoryCallback)
+	var updateSpecificModel = function(rows,fields){
+		modelDetails = {}
+		//build the specific model details to update
+		utils.buildDetails(rows,modelDetails,body)
+		//update the specific model specified by model_id
+		query = 'UPDATE ?? SET ? WHERE model_id = ?'
+		queryParams = []
+		queryParams.push(category)
+		queryParams.push(modelDetails)
+		queryParams.push(modelId)
+		return req.conn.query(query,queryParams)
+	}
+
+	var getModelColumns = function(rows,fields){
+		query = 'SHOW COLUMNS FROM model'
+		queryParams = []
+		return req.conn.query(query,queryParams)
+	}
+
+	var updateModel = function(rows,fields){
+		modelDetails = {}
+		//build the model details to update
+		utils.buildDetails(rows,modelDetails,body)
+		//update the model
+		query = 'UPDATE model SET ? WHERE id = ?'
+		queryParams = []
+		queryParams.push(modelDetails)
+		queryParams.push(modelId)
+		return req.conn.query(query,queryParams)
+	}
+
+	var sendResults = function(rows,fields){
+		res.status(200)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+
+	getCategory()
+		.then(getColumns)
+		.then(updateModel)
+		.done(sendResults,db.throwError)
 }
 
 exports.changeCategory = function(req,res,next){

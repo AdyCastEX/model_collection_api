@@ -9,6 +9,7 @@ exports.createConnection = function(req,res,next){
 
 	var setConnection = function(conn){
 		req.conn = conn
+		console.log('Connection established with ' + req.ip)
 		next()
 	}
 
