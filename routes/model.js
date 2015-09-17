@@ -55,7 +55,6 @@ exports.listModels = function(req,res,next){
 		getSpecificModels()
 			.done(sendResults,db.throwError)
 	}
-
 }
 
 exports.viewModel = function(req,res,next){
@@ -95,7 +94,7 @@ exports.viewModel = function(req,res,next){
 			}
 		} else { //throw an error state when the model was not found
 			res.status(404)
-			throw err.generateModelNotFoundError(modelId)
+			throw err.generateModelNotFoundError('model',modelId)
 		}
 	}
 
@@ -158,7 +157,14 @@ exports.createModel = function(req,res,next){
 		queryParams = []
 		queryParams.push(keys)
 		queryParams.push(values)
-		return req.conn.query(query,queryParams)
+
+		if(category === 'other'){
+			return req.conn.query(query,queryParams)
+		} else {
+			return req.conn.query(query,queryParams)
+					.then(getSpecificColumns)
+					.then(insertSpecificModel)
+		}
 	}
 
 	var getSpecificColumns = function(rows,fields){
@@ -208,22 +214,11 @@ exports.createModel = function(req,res,next){
 		req.conn.end()
 	}
 
-	if(category === 'other'){
-		getCategory()		
-			.then(getColumns)
-			.then(insertModel)
-			.then(insertModelCategory)
-			.done(sendResults,db.throwError) 
-	} else {
-		getCategory()
-			.then(getColumns)
-			.then(insertModel)
-			.then(getSpecificColumns)
-			.then(insertSpecificModel)
-			.then(insertModelCategory)
-			.done(sendResults,db.throwError) 
-	}
-	
+	getCategory()		
+		.then(getColumns)
+		.then(insertModel)
+		.then(insertModelCategory)
+		.done(sendResults,db.throwError) 
 }
 
 exports.deleteModel = function(req,res,next){
@@ -260,7 +255,7 @@ exports.deleteModel = function(req,res,next){
 							   .then(removeCategory)
 			}
 		} else {
-			throw err.generateModelNotFoundError(modelId)
+			throw err.generateModelNotFoundError('model',modelId)
 		}
 	}
 
@@ -329,7 +324,7 @@ exports.updateModel = function(req,res,next){
 							   .then(getModelColumns)
 			}
 		} else {
-			throw err.generateModelNotFoundError(modelId)
+			throw err.generateModelNotFoundError('model',modelId)
 		}
 	}
 
@@ -387,191 +382,172 @@ exports.changeCategory = function(req,res,next){
 	var keys
 	var values
 
-	var updateCategoryCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			res.status(200)
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var getCategory = function(){
+		//determine the category of the model
+		query = 'SELECT id, name FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
+		queryParams = []
+		queryParams.push(modelId)
+		return req.conn.query(query,queryParams)
 	}
 
-	var insertSpecificModelCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else { //change the category of the model in the model_has_category table
+	var getNewCategoryOrDeleteSpecificModel = function(rows,fields){
+		categoryId = rows[0]['id']
+		categoryName = rows[0]['name']
+
+		if(categoryId == newCategoryId){ //no need to perform database processing if the new category is the same as the current one
+			throw err.generateCategoryAlreadySetError(categoryName)
+		} else { //perform the necessary changes
+			if(categoryName === 'other'){ //if the model will be changed to the 'other' category, there is no need to delete the entry from the model's specific category
+				query = 'SELECT name FROM category WHERE id = ?'
+				queryParams = []
+				queryParams.push(newCategoryId)
+				return req.conn.query(query,queryParams)
+			} else { //delete the model's entry from its specific table before finding the name of the new category
+				query = 'DELETE FROM ?? WHERE model_id = ?'
+				queryParams = []
+				queryParams.push(categoryName)
+				queryParams.push(modelId)
+				return req.conn.query(query,queryParams)
+						       .then(getNewCategory)
+			}
+		}
+	}
+
+	var getNewCategory = function(rows,fields){
+		//find the name of the new category
+		query = 'SELECT name FROM category WHERE id = ?'
+		queryParams = []
+		queryParams.push(newCategoryId)
+		return req.conn.query(query,queryParams)
+	}
+
+	var updateCategoryOrGetColumns = function(rows,fields){
+		//assumes the last resolution function returned a query promise to get the name of the new category
+		newCategoryName = rows[0]['name']
+
+		if(newCategoryName === 'other'){ //no need to insert into a specific model table
 			query = 'UPDATE model_has_category SET category_id = ? WHERE model_id = ?'
 			queryParams = []
 			queryParams.push(newCategoryId)
 			queryParams.push(modelId)
-			req.conn.query(query,queryParams,updateCategoryCallback)
-		}
-	}
-
-	var getNewCategoryColumnsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else { //build details and insert into the specific table of the new category
-			modelDetails = {}
-			utils.buildDetails(rows,modelDetails,body)
-			modelDetails['model_id'] = modelId
-			keys = []
-			values = []
-			utils.getKeyValues(modelDetails,keys,values)
-			query = 'INSERT INTO ?? (??) VALUES (?)'
+			return req.conn.query(query,queryParams)
+		} else { //need to determine what attributes will be inserted	
+			query = 'SHOW COLUMNS FROM ??'
 			queryParams = []
 			queryParams.push(newCategoryName)
-			queryParams.push(keys)
-			queryParams.push(values)
-			req.conn.query(query,queryParams,insertSpecificModelCallback)
+			return req.conn.query(query,queryParams)
+						   .then(insertSpecificModel)
+						   .then(updateCategory)
 		}
 	}
 
-	var getNewCategoryNameCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
-			newCategoryName = rows[0]['name']
-
-			if(newCategoryName === 'other'){ //no need to insert into a specific model table
-				query = 'UPDATE model_has_category SET category_id = ? WHERE model_id = ?'
-				queryParams = []
-				queryParams.push(newCategoryId)
-				queryParams.push(modelId)
-				req.conn.query(query,queryParams,updateCategoryCallback)
-			} else { //need to determine what attributes will be inserted
-				query = 'SHOW COLUMNS FROM ??'
-				queryParams = []
-				queryParams.push(newCategoryName)
-				req.conn.query(query,queryParams,getNewCategoryColumnsCallback)
-			}
-		}
+	var insertSpecificModel = function(rows,fields){
+		modelDetails = {}
+		utils.buildDetails(rows,modelDetails,body)
+		modelDetails['model_id'] = modelId
+		keys = []
+		values = []
+		utils.getKeyValues(modelDetails,keys,values)
+		//since the model changed to a specific category, there is a need to insert a new entry to specific category
+		query = 'INSERT INTO ?? (??) VALUES (?)'
+		queryParams = []
+		queryParams.push(newCategoryName)
+		queryParams.push(keys)
+		queryParams.push(values)
+		req.conn.query(query,queryParams)
 	}
 
-	var deleteSpecificModelCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else { //determine the name of the model's new category
-			query = 'SELECT name FROM category WHERE id = ?'
-			queryParams = []
-			queryParams.push(newCategoryId)
-			req.conn.query(query,queryParams,getNewCategoryNameCallback)
-		}
+	var updateCategory = function(rows,fields){
+		//update the model's category in the model_has_category table
+		query = 'UPDATE model_has_category SET category_id = ? WHERE model_id = ?'
+		queryParams = []
+		queryParams.push(newCategoryId)
+		queryParams.push(modelId)
+		return req.conn.query(query,queryParams)
 	}
 
-	var getCategoryCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {	
-			categoryId = rows[0]['id']
-			categoryName = rows[0]['name']
-
-			if(categoryId == newCategoryId){ //no need to perform database processing if the new category is the same as the current one
-				res.status = 500
-				res.json({
-					success : false,
-					error : 'CATEGORY_NOT_UPDATED'	
-				})
-				req.conn.release()
-			} else { //perform the necessary changes
-				if(categoryName === 'other'){ //if the model will be changed to the 'other' category, there is no need to delete the entry from the model's specific category
-					query = 'SELECT name FROM category WHERE id = ?'
-					queryParams = []
-					queryParams.push(newCategoryId)
-					req.conn.query(query,queryParams,getNewCategoryNameCallback)
-				} else { //delete the model's entry from its specific table
-					query = 'DELETE FROM ?? WHERE model_id = ?'
-					queryParams = []
-					queryParams.push(categoryName)
-					queryParams.push(modelId)
-					req.conn.query(query,queryParams,deleteSpecificModelCallback)
-				}
-			}
-		}
+	var sendResults = function(rows,fields){
+		res.status(200)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
 	}
 
-	//determine the category of the model
-	query = 'SELECT id, name FROM category INNER JOIN model_has_category ON category.id = model_has_category.category_id WHERE model_has_category.model_id = ?'
-	queryParams = []
-	queryParams.push(modelId)
-	req.conn.query(query,queryParams,getCategoryCallback)
+	getCategory()
+		.then(getNewCategoryOrDeleteSpecificModel)
+		.then(updateCategoryOrGetColumns)
+		.done(sendResults,db.throwError)
 }
 
 exports.listCustomModels = function(req,res,next){
-	
-	var getCustomModelsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var getCustomModels = function(){
+		query = 'SELECT * FROM ??'
+		queryParams = []
+		queryParams.push('custom_model')
+		return req.conn.query(query,queryParams)
 	}
 
-	query = 'SELECT * FROM ??'
-	queryParams = []
-	queryParams.push('custom_model')
-	req.conn.query(query,queryParams,getCustomModelsCallback)
+	var sendResults = function(rows,fields){
+		res.status(200)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+	getCustomModels()
+		.done(sendResults,db.throwError)
 }
 
 exports.viewCustomModel = function(req,res,next){
 	var customModelId = req.params.id
 	var result
 
-	var getComponentsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			//since only one result is expected, set the first index to store the components
-			result[0]['components'] = rows
-			res.status(200)
-			sendSQLResults(res,result)
-		}
-		req.conn.release()
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var findCustomModel = function(){
+		//find the model from the custom_model table
+		query = 'SELECT * FROM ?? WHERE id = ?'
+		queryParams = []
+		queryParams.push('custom_model')
+		queryParams.push(customModelId)
+		return req.conn.query(query,queryParams)
 	}
 
-	var selectCustomModelCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
-			if(rows.length > 0){ //process if model exists
-				result = rows
-				columns = ['id','name','status']
-				//get the component models of the custom model
-				query = 'SELECT ?? FROM ?? INNER JOIN ?? ON ??.model_id = ??.id WHERE ??.custom_model_id = ?'
-				queryParams = []
-				queryParams.push(columns)
-				queryParams.push('custom_model_composed_of_model')
-				queryParams.push('model')
-				queryParams.push('custom_model_composed_of_model')
-				queryParams.push('model')
-				queryParams.push('custom_model_composed_of_model')
-				queryParams.push(customModelId)
-				req.conn.query(query,queryParams,getComponentsCallback)
-			} else { //return an error state if the model was not found
-				res.status(404)
-				res.json({
-					success : false,
-					error : 'MODEL_NOT_FOUND'
-				})
-				req.conn.release()
-			}
+	var getComponents = function(rows,fields){
+		if(rows.length > 0){ //process if model exists
+			result = rows
+			columns = ['id','name','status']
+			//get the component models of the custom model
+			query = 'SELECT ?? FROM ?? INNER JOIN ?? ON ??.model_id = ??.id WHERE ??.custom_model_id = ?'
+			queryParams = []
+			queryParams.push(columns)
+			queryParams.push('custom_model_composed_of_model')
+			queryParams.push('model')
+			queryParams.push('custom_model_composed_of_model')
+			queryParams.push('model')
+			queryParams.push('custom_model_composed_of_model')
+			queryParams.push(customModelId)
+			return req.conn.query(query,queryParams)
+		} else { //return an error state if the model was not found
+			throw err.generateModelNotFoundError('custom model',customModelId)
 		}
 	}
 
-	//find the model from the custom_model table
-	query = 'SELECT * FROM ?? WHERE id = ?'
-	queryParams = []
-	queryParams.push('custom_model')
-	queryParams.push(customModelId)
-	req.conn.query(query,queryParams,selectCustomModelCallback)
+	var sendResults = function(rows,fields){
+		//since only one result is expected, set the first index to store the components
+		result[0]['components'] = rows
+		res.status(200)
+		db.sendSQLResults(res,result)
+		req.conn.end()
+	}
+
+	findCustomModel()
+		.then(getComponents)
+		.done(sendResults,db.throwError)
 }
 
 exports.createCustomModel = function(req,res,next){
@@ -579,109 +555,107 @@ exports.createCustomModel = function(req,res,next){
 	var modelDetails = {}
 	var keys = []
 	var values = []
-	var components = ''
+	var components = []
 	var insertId
+
+	db.throwError.req = req
+	db.throwError.res = res
 
 	if('components' in body){
 		components = body.components
 	}
 
-	var insertComponentsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
+	var getColumns = function(){
+		//determine the columns/attributes of the custom_model table
+		query = 'SHOW COLUMNS FROM custom_model'
+		queryParams = []
+		return req.conn.query(query,queryParams)
+	}
+
+	var insertCustomModel = function(rows,fields){
+		//build the custom model's details
+		utils.buildDetails(rows,modelDetails,body)
+		keys = []
+		values = []
+		utils.getKeyValues(modelDetails,keys,values)
+		//insert the custom model
+		query = 'INSERT INTO custom_model (??) VALUES (?)'
+		queryParams = []
+		queryParams.push(keys)
+		queryParams.push(values)
+		return req.conn.query(query,queryParams)
+	}
+
+	var insertComponents = function(rows,fields){
+		var numComponents = components.length
+		if(numComponents == 0){ //there are no component models to associate with the custom model (components is an array if there are component models)
 			res.status(201)
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
-	}
-
-	var insertCustomModelCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
+			db.sendSQLResults(res,rows)
+			req.conn.end()
 		} else {
-			if(components == ''){ //there are no component models to associate with the custom model (components is an array if there are component models)
-				sendSQLResults(res,rows)
-				req.conn.release()
-			} else {
-				insertId = rows.insertId
-				var numComponents = components.length
-				//insert multiple rows in one query
-				query = 'INSERT INTO custom_model_composed_of_model (custom_model_id,model_id) VALUES '
-				queryParams = []
-				//for each value in the components array, add escaped values to the query
-				for(var i=0;i<numComponents;i+=1){
-					query += '(?,?)'
-					//add commas if not the last entry
-					if(i != numComponents-1){
-						query += ', '
-					}
-					queryParams.push(insertId)
-					queryParams.push(components[i])
-				}
-				//console.log(query)
-				req.conn.query(query,queryParams,insertComponentsCallback)
-			}
-		}
-	}
-
-	var getCustomModelColumnsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
-			//build the custom model's details
-			utils.buildDetails(rows,modelDetails,body)
-			keys = []
-			values = []
-			utils.getKeyValues(modelDetails,keys,values)
-			//insert the custom model
-			query = 'INSERT INTO custom_model (??) VALUES (?)'
+			insertId = rows.insertId
+			//insert multiple rows in one query
+			query = 'INSERT INTO custom_model_composed_of_model (custom_model_id,model_id) VALUES '
 			queryParams = []
-			queryParams.push(keys)
-			queryParams.push(values)
-			req.conn.query(query,queryParams,insertCustomModelCallback)
+			//for each value in the components array, add escaped values to the query
+			for(var i=0;i<numComponents;i+=1){
+				query += '(?,?)'
+				//add commas if not the last entry
+				if(i != numComponents-1){
+					query += ', '
+				}
+				queryParams.push(insertId)
+				queryParams.push(components[i])
+			}
+			//console.log(query)
+			return req.conn.query(query,queryParams)
+						   .then(sendResults)
 		}
 	}
 
-	//determine the columns/attributes of the custom_model table
-	query = 'SHOW COLUMNS FROM custom_model'
-	queryParams = []
-	req.conn.query(query,queryParams,getCustomModelColumnsCallback)
+	var sendResults = function(rows,fields){
+		res.status(201)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+
+	getColumns()
+		.then(insertCustomModel)
+		.done(insertComponents,db.throwError)
 }
 
 exports.deleteCustomModel = function(req,res,next){
 	var customModelId = req.params.id
 
-	var deleteCustomModelCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			res.status(204)
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var removeComponents = function(){
+		//remove the custom model's connections with component models
+		query = 'DELETE FROM custom_model_composed_of_model WHERE custom_model_id = ?'
+		queryParams = []
+		queryParams.push(customModelId)
+		return req.conn.query(query,queryParams)
 	}
 
-	var deleteComponentsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
-			//delete the custom model
-			query = 'DELETE FROM custom_model WHERE id = ?'
-			queryParams = []
-			queryParams.push(customModelId)
-			req.conn.query(query,queryParams,deleteCustomModelCallback)
-		}
+	var removeCustomModel = function(rows,fields){
+		//delete the custom model
+		query = 'DELETE FROM custom_model WHERE id = ?'
+		queryParams = []
+		queryParams.push(customModelId)
+		return req.conn.query(query,queryParams)
 	}
 
-	//remove the custom model's connections with component models
-	query = 'DELETE FROM custom_model_composed_of_model WHERE custom_model_id = ?'
-	queryParams = []
-	queryParams.push(customModelId)
-	req.conn.query(query,queryParams,deleteComponentsCallback)
+	var sendResults = function(rows,fields){
+		res.status(204)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+
+	removeComponents()
+		.then(removeComponents)
+		.then(removeCustomModel)
+		.done(sendResults,db.throwError)
 }
 
 exports.updateCustomModel = function(req,res,next){
@@ -689,37 +663,37 @@ exports.updateCustomModel = function(req,res,next){
 	var customModelId = req.params.id
 	var customModelDetails = {}
 
-	var updateCustomModelCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			res.status(200)
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var getColumns = function(){
+		query = 'SHOW COLUMNS FROM ??'
+		queryParams = []
+		queryParams.push('custom_model')
+		return req.conn.query(query,queryParams)
 	}
 
-	var getCustomModelColumnsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
-			customModelDetails = {}
-			utils.buildDetails(rows,customModelDetails,body)
+	var editCustomModel = function(rows,fields){
+		customModelDetails = {}
+		utils.buildDetails(rows,customModelDetails,body)
 
-			query = 'UPDATE ?? SET ? WHERE id = ?'
-			queryParams = []
-			queryParams.push('custom_model')
-			queryParams.push(customModelDetails)
-			queryParams.push(customModelId)
-			req.conn.query(query,queryParams,updateCustomModelCallback)
-		}
+		query = 'UPDATE ?? SET ? WHERE id = ?'
+		queryParams = []
+		queryParams.push('custom_model')
+		queryParams.push(customModelDetails)
+		queryParams.push(customModelId)
+		return req.conn.query(query,queryParams)
 	}
 
-	query = 'SHOW COLUMNS FROM ??'
-	queryParams = []
-	queryParams.push('custom_model')
-	req.conn.query(query,queryParams,getCustomModelColumnsCallback)
+	var sendResults = function(rows,fields){
+		res.status(200)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+
+	getColumns()
+		.then(editCustomModel)
+		.done(sendResults,db.throwError)
 }
 
 exports.editComponents = function(req,res,next){
