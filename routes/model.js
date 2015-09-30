@@ -697,92 +697,112 @@ exports.updateCustomModel = function(req,res,next){
 }
 
 exports.editComponents = function(req,res,next){
-	var customModelId = req.params.id
-	var action = req.params.action
-	var components = []
+	var body = req.body
+	var modelId = req.params.id
+	var newComponents = [] 
+	var currentComponents = []
+	var newComponentsCount = 0
+	var currentComponentsCount = 0 
 
-	if('components' in req.body){
-		if(req.body.components instanceof Array){
-			//if 'components' in the body is an array, remove possible duplicates
-			utils.removeDuplicates(req.body.components,components)
-		} else {
-			//if 'components' is a single value, push the value to the components variable to make it an array
-			components.push(req.body.components)
-		}
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var getComponents = function(){
+		//get the component models that are already associated with the custom model
+		query = 'SELECT ?? FROM ?? WHERE custom_model_id = ?'
+		queryParams = []
+		queryParams.push('model_id')
+		queryParams.push('custom_model_composed_of_model')
+		queryParams.push(modelId)
+		return req.conn.query(query,queryParams)
 	}
 
-	var length = components.length
-
-	var editComponentsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			res.status(200)
-			sendSQLResults(res,rows)
+	var deleteCurrentComponents = function(rows,fields){
+		var numRows = rows.length
+		
+		//convert the array of rows containing model ids to an array of model ids
+		for(var i=0;i<numRows;i+=1){
+			currentComponents.push(rows[i]['model_id'])
 		}
-		req.conn.release()
-	}
 
-	if(length > 0){
-		if(action === 'add'){
-			//to declare a model as a component of the custom_model, insert into the custom_model_composed_of_model table
-			query = 'INSERT INTO ?? (custom_model_id,model_id) VALUES '
-			queryParams = []
-			queryParams.push('custom_model_composed_of_model')
-			for(var i=0;i<length;i+=1){
-				query += '(?,?)'
-				if(i != length-1){
-					query += ', '
-				}
-				queryParams.push(customModelId)
-				queryParams.push(components[i])
-			}
-			//add this line to prevent the entire query from failing when there are duplicate inserts
-			query += ' ON DUPLICATE KEY UPDATE model_id = model_id'
-			req.conn.query(query,queryParams,editComponentsCallback)
-		} else if(action === 'remove'){
-			//remove the component entry from the table
+		//any components value in the body that is not an array is ignored (newComponents is left empty)
+		if(body['components'] instanceof Array){
+			newComponents = body['components']
+		}
+		
+		//remove the components common to currentComponents and newComponents since there is no need to modify them
+		utils.removeArrayIntersection(currentComponents,newComponents)
+		//get the new lengths after common components are removed
+		currentComponentsCount = currentComponents.length
+		newComponentsCount = newComponents.length
+
+		if(currentComponentsCount > 0){
+			//delete the components that used to be linked to a custom model (those not included in the new components array)
 			query = 'DELETE FROM ?? WHERE custom_model_id = ? AND model_id IN (?)'
 			queryParams = []
 			queryParams.push('custom_model_composed_of_model')
-			queryParams.push(customModelId)
-			queryParams.push(components)
-			req.conn.query(query,queryParams,editComponentsCallback)
+			queryParams.push(modelId)
+			queryParams.push(currentComponents)
+			return req.conn.query(query,queryParams)
 		} else {
-			//respond with an error if anything other than add or remove was set as the action parameter
-			res.status = 500
-			res.json({
-				success : false,
-				error : 'INVALID_ACTION'	
-			})
-			req.conn.release()
+			//if there is nothing to delete, try to delete a nonexistent row to preserve the promise chain
+			query = 'DELETE FROM custom_model_composed_of_model WHERE custom_model_id = -1'
+			queryParams = []
+			return req.conn.query(query,queryParams)
 		}
-	} else {
-		//respond with an error if there were no components passed in the request body
-		res.status = 500
-		res.json({
-			success : false,
-			error : 'NOTHING_TO_CHANGE'	
-		})
-		req.conn.release()
 	}
+
+	var addNewComponents = function(rows,fields){
+		if(newComponentsCount > 0){ //insert rows if there are components to insert
+			query = 'INSERT INTO ?? (custom_model_id,model_id) VALUES'
+			queryParams = []
+			queryParams.push('custom_model_composed_of_model')
+			for(var i=0;i<newComponentsCount;i+=1){
+				query += '(?,?)'
+				if(i != newComponentsCount-1){
+					query += ','
+				}
+				queryParams.push(modelId)
+				queryParams.push(newComponents[i])
+			}
+			return req.conn.query(query,queryParams)
+						   .then(sendSQLResults)
+		} else { //send the results and end the connection if there are no components to insert
+			res.status(200)
+			db.sendSQLResults(res,rows)
+			req.conn.end()
+		}
+	}
+
+	var sendSQLResults = function(rows,fields){
+		res.status(200)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+
+	getComponents()
+		.then(deleteCurrentComponents)
+		.done(addNewComponents,db.throwError)
 }
 
 exports.listModelColumns = function(req,res,next){
 	var table = req.params.table
 
-	var getModelColumnsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			res.status(200)
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var getModelColumns = function(){
+		query = 'SHOW COLUMNS FROM ??'
+		queryParams = []
+		queryParams.push(table)
+		return req.conn.query(query,queryParams)
 	}
 
-	query = 'SHOW COLUMNS FROM ??'
-	queryParams = []
-	queryParams.push(table)
-	req.conn.query(query,queryParams,getModelColumnsCallback)
+	var sendSQLResults = function(rows,fields){
+		res.status(200)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+	getModelColumns()
+		.done(sendSQLResults,db.throwError)	
 }	
