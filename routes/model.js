@@ -769,12 +769,12 @@ exports.editComponents = function(req,res,next){
 						   .then(sendSQLResults)
 		} else { //send the results and end the connection if there are no components to insert
 			res.status(200)
-			db.sendSQLResults(res,rows)
+			db.sendResults(res,rows)
 			req.conn.end()
 		}
 	}
 
-	var sendSQLResults = function(rows,fields){
+	var sendResults = function(rows,fields){
 		res.status(200)
 		db.sendSQLResults(res,rows)
 		req.conn.end()
@@ -798,11 +798,11 @@ exports.listModelColumns = function(req,res,next){
 		return req.conn.query(query,queryParams)
 	}
 
-	var sendSQLResults = function(rows,fields){
+	var sendResults = function(rows,fields){
 		res.status(200)
 		db.sendSQLResults(res,rows)
 		req.conn.end()
 	}
 	getModelColumns()
-		.done(sendSQLResults,db.throwError)	
+		.done(sendResults,db.throwError)	
 }	

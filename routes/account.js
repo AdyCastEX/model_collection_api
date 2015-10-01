@@ -1,9 +1,7 @@
 var shared = require('../app.js')
 var utils = require('../helpers/utils.js')
-var bcrypt = require('bcrypt-nodejs')
-
-var throwSQLError = shared.throwSQLError
-var sendSQLResults = shared.sendSQLResults
+var bcrypt = require('bcrypt-as-promised')
+var db = require('../helpers/db.js')
 
 var query = ''
 var queryParams = []
@@ -17,180 +15,181 @@ var values = []
 	Parameters:
 
 	data             -- the password to encrypt (string)
-	callback         -- a callback function to be called as soon as encryption is complete
+
+	Returns : 
+	
+	encryptPromise   -- a promise that contains the result of the encryption
 */
 
-var encryptPassword = function(data,callback){
+var encryptPassword = function(data){
 
-	var generateSaltCallback = function(err,result){
-		//result holds the generated salt
-		bcrypt.hash(data,result,null,callback)
+	var generateSalt = function(){
+		//generate random data to add to the hash as additional data
+		return bcrypt.genSalt(10)
 	}
-	//generate random data to add to the hash as additional data
-	bcrypt.genSalt(10,generateSaltCallback)
+
+	var hashPassword = function(result){
+		//result holds the generated salt
+		return bcrypt.hash(data,result)
+	}
+	
+	var encryptPromise = generateSalt().then(hashPassword)
+	return encryptPromise
 }
 
 exports.viewUser = function(req,res,next){
 	var userId = req.params.id
 
-	var getUserCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			res.status(200)
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var getUser = function(){
+		//get the user with the specified id
+		query = 'SELECT * FROM ?? WHERE id = ?'
+		queryParams = []
+		queryParams.push('user')
+		queryParams.push(userId)
+		return req.conn.query(query,queryParams)
 	}
 
-	//get the user with the specified id
-	query = 'SELECT * FROM ?? WHERE id = ?'
-	queryParams = []
-	queryParams.push('user')
-	queryParams.push(userId)
-	req.conn.query(query,queryParams,getUserCallback)
+	var sendResults = function(rows,fields){
+		res.status(200)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+	
+	getUser()
+		.done(sendResults,db.throwError)
 }
 
 exports.createUser = function(req,res,next){
 	var body = req.body
 
-	var insertUserCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			res.status(201)
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var getColumns = function(){
+		//get the columns of the table that stores the users
+		query = 'SHOW COLUMNS FROM ??'
+		queryParams = []
+		queryParams.push('user')
+		return req.conn.query(query,queryParams)
 	}
 
-	var encryptPasswordCallback = function(err,result){
-		if(err){
-			res.status(500)
-			res.json({
-				success : false,
-				error : err.code
-			})
-			req.conn.release()
-		} else {
-			keys = []
-			values = []
-			//set the password as the result of the encryption
-			userDetails['password'] = result
-			//split the details' keys and values into separate arrays
-			utils.getKeyValues(userDetails,keys,values)
-
-			//create the user
-			query = 'INSERT INTO ?? (??) VALUES (?)'
-			queryParams = []
-			queryParams.push('user')
-			queryParams.push(keys)
-			queryParams.push(values)
-			req.conn.query(query,queryParams,insertUserCallback)
-		}
+	var encodePassword = function(rows,fields){
+		userDetails = {}
+		//build the user details from the body
+		utils.buildDetails(rows,userDetails,body)
+		//encrypt the password for extra security
+		return encryptPassword(userDetails['password'])
 	}
 
-	var getUserColumnsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
-			userDetails = {}
-			//build the user details from the body
-			utils.buildDetails(rows,userDetails,body)
-			//encrypt the password for extra security
-			encryptPassword(userDetails['password'],encryptPasswordCallback)
-		}
+	var insertUserData = function(result){
+		keys = []
+		values = []
+		//set the password as the result of the encryption
+		userDetails['password'] = result
+		//split the details' keys and values into separate arrays
+		utils.getKeyValues(userDetails,keys,values)
+
+		//create the user
+		query = 'INSERT INTO ?? (??) VALUES (?)'
+		queryParams = []
+		queryParams.push('user')
+		queryParams.push(keys)
+		queryParams.push(values)
+		return req.conn.query(query,queryParams)
 	}
 
-	//get the columns of the table that stores the users
-	query = 'SHOW COLUMNS FROM ??'
-	queryParams = []
-	queryParams.push('user')
-	req.conn.query(query,queryParams,getUserColumnsCallback)
+	var sendResults = function(rows,fields){
+		res.status(201)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+
+	getColumns()
+		.then(encodePassword)
+		.then(insertUserData)
+		.done(sendResults,db.throwError)
 }
 
 exports.deleteUser = function(req,res,next){
 	var userId = req.params.id
 
-	var deleteUserCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			res.status(204)
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var removeUser = function(){
+		query = 'DELETE FROM ?? WHERE id = ?'
+		queryParams = []
+		queryParams.push('user')
+		queryParams.push(userId)
+		return req.conn.query(query,queryParams)
 	}
 
-	query = 'DELETE FROM ?? WHERE id = ?'
-	queryParams = []
-	queryParams.push('user')
-	queryParams.push(userId)
-	req.conn.query(query,queryParams,deleteUserCallback)
+	var sendResults = function(rows,fields){
+		res.status(204)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+
+	removeUser()
+		.done(sendResults,db.throwError)	
 }
 
 exports.updateUser = function(req,res,next){
 	var body = req.body
 	var userId = req.params.id
 
-	var updateUserCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-		} else {
-			res.status(200)
-			sendSQLResults(res,rows)
-		}
-		req.conn.release()
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var getColumns = function(){
+		//determine the columns of the user table
+		query = 'SHOW COLUMNS FROM ??'
+		queryParams = []
+		queryParams.push('user')
+		return req.conn.query(query,queryParams)
 	}
 
-	var encryptPasswordCallback = function(err,result){
-		if(err){
-			res.status(500)
-			res.json({
-				success : false,
-				error : err.code
-			})
-			req.conn.release()
-		} else {
-			//set the password to the encrypted version
-			userDetails['password'] = result
-			//update the user
+	var editUserOrEncodePassword = function(rows,fields){
+		userDetails = {}
+		//build the details of the fields to update
+		utils.buildDetails(rows,userDetails,body)
+
+		//if the password is to be updated, encrypt the newly provided password
+		if('password' in userDetails){
+			return encryptPassword(userDetails['password'])
+						     .then(editUser)
+		} else { 
 			query = 'UPDATE ?? SET ? WHERE id = ?'
 			queryParams = []
 			queryParams.push('user')
 			queryParams.push(userDetails)
 			queryParams.push(userId)
-			req.conn.query(query,queryParams,updateUserCallback)
+			return req.conn.query(query,queryParams)
 		}
 	}
 
-	var getUserColumnsCallback = function(err,rows,fields){
-		if(err){
-			throwSQLError(err,res)
-			req.conn.release()
-		} else {
-			userDetails = {}
-			//build the details of the fields to update
-			utils.buildDetails(rows,userDetails,body)
-
-			//if the password is to be updated, encrypt the newly provided password
-			if('password' in userDetails){
-				encryptPassword(userDetails['password'],encryptPasswordCallback)
-			} else { 
-				query = 'UPDATE ?? SET ? WHERE id = ?'
-				queryParams = []
-				queryParams.push('user')
-				queryParams.push(userDetails)
-				queryParams.push(userId)
-				req.conn.query(query,queryParams,updateUserCallback)
-			}
-		}
+	var editUser = function(result){
+		//set the password to the encrypted version
+		userDetails['password'] = result
+		//update the user
+		query = 'UPDATE ?? SET ? WHERE id = ?'
+		queryParams = []
+		queryParams.push('user')
+		queryParams.push(userDetails)
+		queryParams.push(userId)
+		return req.conn.query(query,queryParams)
 	}
 
-	//determine the columns of the user table
-	query = 'SHOW COLUMNS FROM ??'
-	queryParams = []
-	queryParams.push('user')
-	req.conn.query(query,queryParams,getUserColumnsCallback)
+	var sendResults = function(rows,fields){
+		res.status(200)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+
+	getColumns()
+		.then(editUserOrEncodePassword)
+		.done(sendResults,db.throwError)
 }
