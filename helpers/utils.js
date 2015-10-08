@@ -1,3 +1,5 @@
+var unique = require('array-unique')
+
 /*
  	Creates a json object that maps table columns(keys) to attributes(values) in a request body
  	
@@ -62,5 +64,74 @@ exports.removeDuplicates = function(source,result){
 			result.push(source[i])
 			compareElement = source[i]
 		}
+	}
+}
+
+/*
+	Gets the intersection of two arrays (based on intersect_safe() in http://stackoverflow.com/questions/1885557/simplest-code-for-array-intersection-in-javascript)
+
+	Parameters:
+
+	arr1              -- the first array
+	arr2              -- the second array
+
+	Returns :
+
+	intersection      -- an array that contains the result of the array intersection (sorted)
+*/
+
+exports.arrayIntersection = function(arr1,arr2){
+	var arr1Cursor = 0
+	var arr2Cursor = 0
+	var arr1Length = arr1.length
+	var arr2Length = arr2.length
+	var intersection = []
+	
+	//sort the two arrays so that order would not affect the result 
+	//remove duplicates since sets should have distinct elements
+	unique(arr1.sort())
+	unique(arr2.sort())
+
+	//if either cursor reaches the last index of their respective arrays, stop
+	while(arr1Cursor < arr1Length && arr2Cursor < arr2Length){
+		if(arr1[arr1Cursor] < arr2[arr2Cursor]){ //the value in arr1 is smaller, a common element may be in the next arr1 index
+			arr1Cursor += 1
+		} else if(arr1[arr1Cursor] > arr2[arr2Cursor]){ //the value in arr1 is bigger, a common element may be in the next arr2 index
+			arr2Cursor += 1
+		} else {
+			//the two compared elements are equal, add to the intersection and move both cursors
+			intersection.push(arr1[arr1Cursor])
+			arr1Cursor += 1
+			arr2Cursor += 1
+		}
+	}
+
+	return intersection
+}
+
+/*
+	Removes the common elements between two arrays (e.g [1,2,4] and [1,2,5] becomes [4] and [5])
+
+	Parameters:
+
+	arr1                 -- the first array
+	arr2                 -- the second array
+
+*/
+
+exports.removeArrayIntersection = function(arr1,arr2){
+	//get the intersection to remove
+	var intersection = exports.arrayIntersection(arr1,arr2)
+	var intersectionLength = intersection.length
+	var index1 = 0
+	var index2 = 0
+
+	for(var i=0;i<intersectionLength;i+=1){
+		//find the index of the element to remove
+		index1 = arr1.indexOf(intersection[i])
+		index2 = arr2.indexOf(intersection[i])
+		//remove the element from the array, assuming that there is only one instance
+		arr1.splice(index1,1)
+		arr2.splice(index2,1)
 	}
 }
