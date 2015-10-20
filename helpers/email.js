@@ -30,7 +30,7 @@ exports.sendActivationEmail = function(userDetails){
 				name_last : userDetails['name_last']
 			},
 			links : {
-				activate_url : 'http://' + config.mailer.host + ':' + config.mailer.port + '?token=' + token
+				activate_url : 'http://' + config.mailer.host + ':' + config.mailer.port + '/accounts/activate/' + token
 			}
 		}
 
