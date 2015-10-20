@@ -1,5 +1,6 @@
 var shared = require('../app.js')
 var utils = require('../helpers/utils.js')
+var email = require('../helpers/email.js')
 var bcrypt = require('bcrypt-as-promised')
 var db = require('../helpers/db.js')
 
@@ -64,6 +65,7 @@ exports.viewUser = function(req,res,next){
 
 exports.createUser = function(req,res,next){
 	var body = req.body
+	var result = []
 
 	db.throwError.req = req
 	db.throwError.res = res
@@ -101,15 +103,21 @@ exports.createUser = function(req,res,next){
 		return req.conn.query(query,queryParams)
 	}
 
-	var sendResults = function(rows,fields){
+	var sendActivationEmail = function(rows,fields){
+		result = rows
+		return email.sendActivationEmail(userDetails)
+	}
+
+	var sendResults = function(info){
 		res.status(201)
-		db.sendSQLResults(res,rows)
+		db.sendSQLResults(res,result)
 		req.conn.end()
 	}
 
 	getColumns()
 		.then(encodePassword)
 		.then(insertUserData)
+		.then(sendActivationEmail)
 		.done(sendResults,db.throwError)
 }
 
@@ -192,4 +200,8 @@ exports.updateUser = function(req,res,next){
 	getColumns()
 		.then(editUserOrEncodePassword)
 		.done(sendResults,db.throwError)
+}
+
+exports.activateUser = function(req,res,next){
+	
 }
