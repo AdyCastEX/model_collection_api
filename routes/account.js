@@ -1,7 +1,13 @@
 var shared = require('../app.js')
 var utils = require('../helpers/utils.js')
+var email = require('../helpers/email.js')
 var bcrypt = require('bcrypt-as-promised')
 var db = require('../helpers/db.js')
+var P = require('bluebird')
+var jwt = P.promisifyAll(require('jsonwebtoken'))
+var config = require('../config.json')
+var jade = require('jade')
+var path = require('path')
 
 var query = ''
 var queryParams = []
@@ -64,6 +70,7 @@ exports.viewUser = function(req,res,next){
 
 exports.createUser = function(req,res,next){
 	var body = req.body
+	var result = []
 
 	db.throwError.req = req
 	db.throwError.res = res
@@ -101,15 +108,21 @@ exports.createUser = function(req,res,next){
 		return req.conn.query(query,queryParams)
 	}
 
-	var sendResults = function(rows,fields){
+	var sendActivationEmail = function(rows,fields){
+		result = rows
+		return email.sendActivationEmail(userDetails)
+	}
+
+	var sendResults = function(info){
 		res.status(201)
-		db.sendSQLResults(res,rows)
+		db.sendSQLResults(res,result)
 		req.conn.end()
 	}
 
 	getColumns()
 		.then(encodePassword)
 		.then(insertUserData)
+		.then(sendActivationEmail)
 		.done(sendResults,db.throwError)
 }
 
@@ -192,4 +205,42 @@ exports.updateUser = function(req,res,next){
 	getColumns()
 		.then(editUserOrEncodePassword)
 		.done(sendResults,db.throwError)
+}
+
+exports.activateUser = function(req,res,next){
+	var token = req.params.token || req.query.token || req.body.token
+
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var verifyToken = function(){
+		return jwt.verifyAsync(token,config.mailer.secret)
+	}
+
+	var readUserDetails = function(decoded){
+		userDetails = decoded
+		query = 'UPDATE ?? SET ? WHERE email = ?'
+		queryParams = []
+		queryParams.push('user')
+		queryParams.push({status : 'activated'})
+		queryParams.push(userDetails['email'])
+		return req.conn.query(query,queryParams)
+	}
+
+	var renderSuccessPage = function(rows,fields){
+		var htmlTemplate = 'html.jade'
+		var templateDir = path.join(__dirname,'..','public','templates','activation_success_page')
+		var options = {
+			pretty : true
+		}
+		var locals = {}
+		var jadeRenderer = jade.compileFile(path.join(templateDir,htmlTemplate),options)
+		var html = jadeRenderer(locals) 
+		res.send(html)
+		req.conn.end()
+	}
+
+	verifyToken()
+		.then(readUserDetails)
+		.done(renderSuccessPage,db.throwError)
 }
