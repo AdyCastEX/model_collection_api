@@ -20,3 +20,15 @@ exports.generateCategoryAlreadySetError = function(category){
 	error.code = 'CATEGORY_ALREADY_SET'
 	return error
 }
+
+exports.generateUserNotFoundError = function(email){
+	var error = new Error('There is no activated user with email = ' + email + ' in the database')
+	error.code = 'USER_NOT_FOUND'
+	return error
+}
+
+exports.generateInvalidPasswordError = function(){
+	var error = new Error('The password entered is invalid')
+	error.code = 'INVALID_PASSWORD'
+	return error
+}

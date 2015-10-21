@@ -8,6 +8,7 @@ var jwt = P.promisifyAll(require('jsonwebtoken'))
 var config = require('../config.json')
 var jade = require('jade')
 var path = require('path')
+var err = require('../helpers/error.js')
 
 var query = ''
 var queryParams = []
@@ -243,4 +244,49 @@ exports.activateUser = function(req,res,next){
 	verifyToken()
 		.then(readUserDetails)
 		.done(renderSuccessPage,db.throwError)
+}
+
+exports.login = function(req,res,next){
+	var email = req.body.email
+	var password = req.body.password
+
+	db.throwError.req = req
+	db.throwError.res = res
+
+	var findUser = function(){
+		query = 'SELECT ?? FROM user WHERE email = ? AND status = ?'
+		queryParams = []
+		queryParams.push(['id','is_admin','password'])
+		queryParams.push(email)
+		queryParams.push('activated')
+		return req.conn.query(query,queryParams)
+	}
+
+	var checkPassword = function(rows,fields){
+		if(rows.length > 0){
+			userDetails = rows[0]
+			var passwordHash = userDetails['password']
+			return bcrypt.compare(password,passwordHash)
+		} else {
+			res.status(404)
+			throw err.generateUserNotFoundError(email)
+		}
+	}
+
+	var createLoginToken = function(result){
+		var secret = config.token.user_secret
+		if(userDetails['is_admin'] == 1){
+			secret = config.token.admin_secret
+		}
+		delete userDetails['password']
+		var token = {}
+		token['code'] = jwt.sign(userDetails,secret)
+		res.status(200)
+		db.sendSQLResults(res,token)
+		req.conn.end()
+	}
+
+	findUser()
+		.then(checkPassword)
+		.done(createLoginToken,db.throwError)
 }

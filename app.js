@@ -36,6 +36,7 @@ app.post('/accounts',account.createUser)
 app.delete('/accounts/:id',account.deleteUser)
 app.put('/accounts/:id',account.updateUser)
 app.get('/accounts/activate/:token',account.activateUser)
+app.post('/login',account.login)
 
 http.createServer(app).listen(app.get('port'),function(){
 	console.log('Model Collection API Listening on port ' + app.get('port') +'...')
