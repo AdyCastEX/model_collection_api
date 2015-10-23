@@ -38,6 +38,8 @@ app.put('/accounts/:id',middleware.verifyUserSession,account.updateUser)
 app.get('/accounts/activate/:token',account.activateUser)
 app.post('/login',account.login)
 
+app.post('/admin/categories',middleware.verifyAdminSession,category.createCategory)
+
 http.createServer(app).listen(app.get('port'),function(){
 	console.log('Model Collection API Listening on port ' + app.get('port') +'...')
 })

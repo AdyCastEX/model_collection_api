@@ -13,6 +13,8 @@ exports.listModels = function(req,res,next){
 	//save the request and response objects as attributes of the throwError() function so that they can be accessed within its function call
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getOtherCategory = function(){
 		//find the id of the 'other' category
@@ -64,6 +66,8 @@ exports.viewModel = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getCategory = function(){
 		var columns = ['id','name']
@@ -93,7 +97,7 @@ exports.viewModel = function(req,res,next){
 				return req.conn.query(query,queryParams)
 			}
 		} else { //throw an error state when the model was not found
-			res.status(404)
+			db.throwError.status = 404
 			throw err.generateModelNotFoundError('model',modelId)
 		}
 	}
@@ -122,6 +126,8 @@ exports.createModel = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getCategory = function(){
 		var columns = ['id']
@@ -227,6 +233,8 @@ exports.deleteModel = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getCategory = function(){
 		//find the category (id and name) of the model to delete 
@@ -296,6 +304,8 @@ exports.updateModel = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getCategory = function(){
 		//determine the category of the model
@@ -384,6 +394,8 @@ exports.changeCategory = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getCategory = function(){
 		//determine the category of the model
@@ -484,6 +496,8 @@ exports.changeCategory = function(req,res,next){
 exports.listCustomModels = function(req,res,next){
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getCustomModels = function(){
 		query = 'SELECT * FROM ??'
@@ -507,6 +521,8 @@ exports.viewCustomModel = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var findCustomModel = function(){
 		//find the model from the custom_model table
@@ -533,6 +549,7 @@ exports.viewCustomModel = function(req,res,next){
 			queryParams.push(customModelId)
 			return req.conn.query(query,queryParams)
 		} else { //return an error state if the model was not found
+			db.throwError.status = 404
 			throw err.generateModelNotFoundError('custom model',customModelId)
 		}
 	}
@@ -560,6 +577,8 @@ exports.createCustomModel = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	if('components' in body){
 		components = body.components
@@ -629,6 +648,8 @@ exports.deleteCustomModel = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var removeComponents = function(){
 		//remove the custom model's connections with component models
@@ -665,6 +686,8 @@ exports.updateCustomModel = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getColumns = function(){
 		query = 'SHOW COLUMNS FROM ??'
@@ -706,6 +729,8 @@ exports.editComponents = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getComponents = function(){
 		//get the component models that are already associated with the custom model
@@ -790,6 +815,8 @@ exports.listModelColumns = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getModelColumns = function(){
 		query = 'SHOW COLUMNS FROM ??'

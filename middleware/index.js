@@ -25,6 +25,7 @@ exports.verifyUserSession = function(req,res,next){
 	//get the login token from the headers
 	var token = req.get('Login-Token')
 	db.throwConnectionError.res = res
+	db.throwConnectionError.errCode = null
 
 	var verifyUserToken = function(){
 		//use the secret for regular users to decode the token (should fail if a token for an admin is used)
@@ -47,6 +48,7 @@ exports.verifyAdminSession = function(req,res,next){
 	//get the login token from the headers
 	var token = req.get('Login-Token')
 	db.throwConnectionError.res = res
+	db.throwConnectionError.errCode = null
 
 	var verifyAdminToken = function(){
 		//use the secret for admin users to decode the token
