@@ -266,6 +266,7 @@ exports.login = function(req,res,next){
 		if(rows.length > 0){
 			userDetails = rows[0]
 			var passwordHash = userDetails['password']
+			db.throwError.errCode = 'INCORRECT_PASSWORD'
 			return bcrypt.compare(password,passwordHash)
 		} else {
 			res.status(404)

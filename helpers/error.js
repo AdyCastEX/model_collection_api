@@ -26,9 +26,3 @@ exports.generateUserNotFoundError = function(email){
 	error.code = 'USER_NOT_FOUND'
 	return error
 }
-
-exports.generateInvalidPasswordError = function(){
-	var error = new Error('The password entered is invalid')
-	error.code = 'INVALID_PASSWORD'
-	return error
-}
