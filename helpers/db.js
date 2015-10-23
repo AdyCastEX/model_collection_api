@@ -14,7 +14,8 @@ exports.throwConnectionError = function(err){
 	//get the response object which was passed as an attribute of this function
 	var res = exports.throwConnectionError.res
 	var errCode = exports.throwConnectionError.errCode
-	res.status(500)
+	var status = exports.throwConnectionError.status || 500
+	res.status(status)
 		res.json({
 			success : false,
 			error : err.code || errCode
@@ -27,7 +28,8 @@ exports.throwError = function(err){
 	var res = exports.throwError.res
 	var req = exports.throwError.req
 	var errCode = exports.throwError.errCode
-	res.status(500)
+	var status = exports.throwError.status || 500
+	res.status(status)
 	res.json({
 		success : false,
 		error : err.code || errCode

@@ -24,5 +24,6 @@
     "nodemailer": "^1.7.0",
     "nodemailer-mailgun-transport": "^1.0.1",
     "promise-mysql": "^1.0.0"
-  }
+  },
+  "devDependencies": {}
 }

@@ -49,6 +49,8 @@ exports.viewUser = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getUser = function(){
 		//get the user with the specified id
@@ -75,6 +77,8 @@ exports.createUser = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getColumns = function(){
 		//get the columns of the table that stores the users
@@ -132,6 +136,8 @@ exports.deleteUser = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var removeUser = function(){
 		query = 'DELETE FROM ?? WHERE id = ?'
@@ -157,6 +163,8 @@ exports.updateUser = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var getColumns = function(){
 		//determine the columns of the user table
@@ -213,6 +221,8 @@ exports.activateUser = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var verifyToken = function(){
 		return jwt.verifyAsync(token,config.mailer.secret)
@@ -252,6 +262,8 @@ exports.login = function(req,res,next){
 
 	db.throwError.req = req
 	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
 
 	var findUser = function(){
 		query = 'SELECT ?? FROM user WHERE email = ? AND status = ?'
