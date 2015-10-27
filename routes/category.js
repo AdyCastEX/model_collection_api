@@ -1,6 +1,7 @@
 var shared = require('../app.js')
 var utils = require('../helpers/utils.js')
 var db = require('../helpers/db.js')
+var err = require('../helpers/error.js')
 
 var throwSQLError = shared.throwSQLError
 var sendSQLResults = shared.sendSQLResults
@@ -72,6 +73,7 @@ exports.createCategory = function(req,res,next){
 	var buildCategoryTable = function(rows,fields){
 		//if a columns field is provided in the body, set columns as provided, else set columns to an empty array
 		var columns = body.columns || []
+		var col
 		var numColumns = columns.length
 		//build a query to create a table for the new category
 		query = 'CREATE TABLE IF NOT EXISTS ?? ('
@@ -79,9 +81,20 @@ exports.createCategory = function(req,res,next){
 		query += ' model_id INT NOT NULL, '
 		//add other columns if the are any
 		for(var i=0;i<numColumns;i+=1){
-			query += columns[i] + ', '
+			col = columns[i]
+			//add the column field and its type to the table (e.g. series_number int(11))
+			query += col['Field'] + ' ' + col['Type']
+			//if the column is nullable, add NOT NULL
+			if(col['Null'] === 'NO'){
+				query += ' NOT NULL'
+			} 
+			if(col['Default'] !== null){
+				//wrap the default value in escaped single quotes so that it is enclosed in single quotes in the query
+				query += ' ' + 'DEFAULT ' + '\'' + col['Default'] + '\''
+			}
+			query += ', '
 		}
-		//the model_id field will always be the primary key
+		//the model_id field will always be the primary key in a category table
 		query += ' PRIMARY KEY (??),'
 		//build the foreign key constraint to reference the id field in the model table
 		query += ' CONSTRAINT ??'
@@ -109,4 +122,58 @@ exports.createCategory = function(req,res,next){
 		.then(buildCategoryDetails)
 		.then(buildCategoryTable)
 		.done(sendResults,db.throwError)
+}
+
+
+exports.viewCategory = function(req,res,next){
+	var categoryId = req.params.id
+	var category = {}
+
+	db.throwError.req = req
+	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
+
+	var getCategory = function(){
+		//get the category information from the category table
+		query = 'SELECT * FROM category WHERE id = ?'
+		queryParams = []
+		queryParams.push(categoryId)
+		return req.conn.query(query,queryParams)
+	}
+
+	var getCategoryColumns = function(rows,fields){
+		if(rows.length > 0){
+			//since only one row is expected, get only the row at index 0
+			category = rows[0]
+			var categoryName = category['name']
+			//if the category is 'other', skip getting the columns of the corresponding category table
+			if(categoryName === 'other'){
+				res.status(200)
+				db.sendSQLResults(res,category)
+				req.conn.end()
+			} else {
+				//get the columns of the corresponding category table
+				query = 'SHOW COLUMNS FROM ??'
+				queryParams = []
+				queryParams.push(categoryName)
+				return req.conn.query(query,queryParams)
+						  .then(sendResults)
+			}
+		} else {
+			db.throwError.status = 404
+			//call the throwError function directly since there will be no next promise to catch the error
+			db.throwError(err.generateCategoryNotFoundError(''))
+		}
+	}
+
+	var sendResults = function(rows,fields){
+		category['columns'] = rows
+		res.status(200)
+		db.sendSQLResults(res,category)
+		req.conn.end()
+	}
+
+	getCategory()
+		.done(getCategoryColumns,db.throwError)
 }

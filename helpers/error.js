@@ -10,7 +10,7 @@ exports.generateModelNotFoundError = function(type,modelId){
 }
 
 exports.generateCategoryNotFoundError = function(category){
-	var error = new Error('Category '+ category +' does not exist')
+	var error = new Error('Category'+ category +' does not exist')
 	error.code = 'CATEGORY_NOT_FOUND'
 	return error
 }
