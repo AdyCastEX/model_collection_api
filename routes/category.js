@@ -79,6 +79,8 @@ exports.createCategory = function(req,res,next){
 		query = 'CREATE TABLE IF NOT EXISTS ?? ('
 		//by default the table should have a model_id column
 		query += ' model_id INT NOT NULL, '
+		queryParams = []
+		queryParams.push(name)
 		//add other columns if the are any
 		for(var i=0;i<numColumns;i+=1){
 			col = columns[i]
@@ -90,7 +92,8 @@ exports.createCategory = function(req,res,next){
 			} 
 			if(col['Default'] !== null){
 				//wrap the default value in escaped single quotes so that it is enclosed in single quotes in the query
-				query += ' ' + 'DEFAULT ' + '\'' + col['Default'] + '\''
+				query += ' ' + 'DEFAULT ?'
+				queryParams.push(col['Default'])
 			}
 			query += ', '
 		}
@@ -102,8 +105,6 @@ exports.createCategory = function(req,res,next){
 		query += ' REFERENCES ?? (??)'
 		query += ' ON DELETE CASCADE ON UPDATE CASCADE'
 		query += ') ENGINE = InnoDB'
-		queryParams = []
-		queryParams.push(name)
 		queryParams.push('model_id')
 		queryParams.push('fk_'+name+'_model1')
 		queryParams.push('model_id')
@@ -176,4 +177,66 @@ exports.viewCategory = function(req,res,next){
 
 	getCategory()
 		.done(getCategoryColumns,db.throwError)
+}
+
+exports.deleteCategory = function(req,res,next){
+	var categoryId = req.params.id
+	var categoryName
+	var otherCategoryId
+
+	db.throwError.req = req
+	db.throwError.res = res
+	db.throwError.status = null
+	db.throwError.errCode = null
+
+	var getOtherCategory = function(){
+		query = 'SELECT id FROM category WHERE name = ?'
+		queryParams = []
+		queryParams.push('other')
+		return req.conn.query(query,queryParams)
+	}
+
+	var removeModelsFromCategory = function(rows,fields){
+		otherCategoryId = rows[0]['id']
+		query = 'UPDATE ?? SET ? WHERE category_id = ?'
+		queryParams = []
+		queryParams.push('model_has_category')
+		queryParams.push({category_id : otherCategoryId})
+		queryParams.push(categoryId)
+		return req.conn.query(query,queryParams)
+	}
+
+	var getCategoryName = function(rows,fields){
+		query = 'SELECT name FROM category WHERE id = ?'
+		queryParams = []
+		queryParams.push(categoryId)
+		return req.conn.query(query,queryParams)
+	}
+
+	var dropCategoryTable = function(rows,fields){
+		categoryName = rows[0]['name']
+		query = 'DROP TABLE ??'
+		queryParams = []
+		queryParams.push(categoryName)
+		return req.conn.query(query,queryParams)
+	}
+
+	var deleteCategoryInfo = function(rows,fields){
+		query = 'DELETE FROM category WHERE id = ?'
+		queryParams = []
+		queryParams.push(categoryId)
+		return req.conn.query(query,queryParams)
+	}
+	var sendResults = function(rows,fields){
+		res.status(204)
+		db.sendSQLResults(res,rows)
+		req.conn.end()
+	}
+
+	getOtherCategory()
+		.then(removeModelsFromCategory)
+		.then(getCategoryName)
+		.then(dropCategoryTable)
+		.then(deleteCategoryInfo)
+		.done(sendResults,db.throwError)
 }

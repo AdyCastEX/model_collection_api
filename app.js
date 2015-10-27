@@ -40,6 +40,7 @@ app.post('/login',account.login)
 
 app.post('/admin/categories',middleware.verifyAdminSession,category.createCategory)
 app.get('/admin/categories/:id',middleware.verifyAdminSession,category.viewCategory)
+app.delete('/admin/categories/:id',middleware.verifyAdminSession,category.deleteCategory)
 
 http.createServer(app).listen(app.get('port'),function(){
 	console.log('Model Collection API Listening on port ' + app.get('port') +'...')
