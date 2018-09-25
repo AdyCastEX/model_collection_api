@@ -1,4 +1,3 @@
-
 INSERT INTO category
 (name,description)
 VALUES
@@ -18,4 +17,3 @@ INSERT INTO category
 (name,description)
 VALUES
 ('other','Models that do not fall under a specific category.');
-

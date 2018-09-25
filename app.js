@@ -1,19 +1,18 @@
-var express = require('express');
-var http = require('http');
-var bodyParser = require('body-parser');
-var account = require('./routes/account.js');
-var model = require('./routes/model.js');
-var category = require('./routes/category.js');
-var middleware = require('./middleware');
+const express = require('express');
 
-var app = express();
+//create a new express app
+const app = express();
 
-app.set('port',5050);
-//add middleware that will be used in all endpoints
-app.use(bodyParser.urlencoded({extended : false}));
-app.use(bodyParser.json());
-app.use(middleware.createConnection);
+//set the port to be either the default or 5050
+app.set('port', process.env.PORT || 5050);
+//accept urlencoded content type
+app.use(express.urlencoded({extended : false}));
+//accept json content type
+app.use(express.json());
+//include the controllers in the app
+app.use(require('./controllers'));
 
+/*
 app.get('/models/lists/:category',middleware.verifyUserSession,model.listModels);
 app.get('/models/:id',middleware.verifyUserSession,model.viewModel);
 app.post('/models',middleware.verifyUserSession,model.createModel);
@@ -42,8 +41,10 @@ app.post('/admin/categories',middleware.verifyAdminSession,category.createCatego
 app.get('/admin/categories/:id',middleware.verifyAdminSession,category.viewCategory);
 app.delete('/admin/categories/:id',middleware.verifyAdminSession,category.deleteCategory);
 app.put('/admin/categories/:id',middleware.verifyAdminSession,category.updateCategory);
+*/
 
-http.createServer(app).listen(app.get('port'),function(){
+//set the app to listen for requests
+app.listen(app.get('port'), () => {
 	console.log('Model Collection API Listening on port ' + app.get('port') +'...');
 });
 

@@ -6,6 +6,9 @@ var err = require('../helpers/error.js');
 var query = '';
 var queryParams = [];
 
+const express = require('express');
+const router = express.Router();
+
 exports.listModels = function(req,res,next){
 	var category = req.params.category;
 	var categoryId;
@@ -832,3 +835,5 @@ exports.listModelColumns = function(req,res,next){
 	getModelColumns()
 		.done(sendResults,db.throwError);
 }	
+
+module.exports = router;

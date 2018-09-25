@@ -1,7 +1,7 @@
 var shared = require('../app.js');
 var utils = require('../helpers/utils.js');
 var email = require('../helpers/email.js');
-var bcrypt = require('bcrypt-as-promised');
+//var bcrypt = require('node.bcrypt');
 var db = require('../helpers/db.js');
 var P = require('bluebird');
 var jwt = P.promisifyAll(require('jsonwebtoken'));
@@ -9,6 +9,9 @@ var config = require('../config.json');
 var jade = require('jade');
 var path = require('path');
 var err = require('../helpers/error.js');
+
+const express = require('express');
+const router = express.Router();
 
 var query = '';
 var queryParams = [];
@@ -303,3 +306,5 @@ exports.login = function(req,res,next){
 		.then(checkPassword)
 		.done(createLoginToken,db.throwError);
 }
+
+module.exports = router; 
