@@ -6,11 +6,31 @@ var err = require('../helpers/error.js');
 var throwSQLError = shared.throwSQLError;
 var sendSQLResults = shared.sendSQLResults;
 
+const express = require('express');
+const router = express.Router();
+const Category = require('../models/category.js');
+
 var query = '';
 var queryParams = [];
 var categoryDetails = {};
 var keys = [];
 var values = [];
+
+router.get('/', async (req,res,next) => {
+	try{
+		//get the categories from the database
+		const categories = await Category.getCategories();
+		//send the result as json
+		res.json({
+			success : true,
+			error : '',
+			result : categories,
+			length : categories.length
+		});
+	} catch (err){
+		console.log(err);
+	}
+});
 
 exports.listCategories = function(req,res,next){
 
@@ -354,3 +374,5 @@ exports.updateCategory = function(req,res,next){
 		.then(editColumns)
 		.done(sendResults,db.throwError);
 }
+
+module.exports = router;

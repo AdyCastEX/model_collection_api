@@ -1,15 +1,43 @@
-var mysql = require('promise-mysql');
-var config = require('../config.json');
+/*
+*   File Description : helper module for database operations
+*/
 
-//get the parameters from the config json file
-var params = {
+const mysql = require('mysql');
+const config = require('../config.json');
+const util = require('util');
+
+//create a pool that stores connections that will be used when performing database operations
+const pool = mysql.createPool({
+	connectionLimit : 100,
 	host : config.db.host,
 	user : config.db.user,
 	password : config.db.password,
-	database : config.db.database
-}
+	database: config.db.database
+});
 
-exports.throwConnectionError = function(err){
+//get a connection to test if the pool is working
+pool.getConnection((err,connection) => {
+	if(err){
+		//log if there is an error
+		console.error(err.code);
+	}
+	
+	if(connection){
+		//if there is a current connection, release it
+		connection.release();
+	}
+	
+	return;
+});
+
+//set pool query function to use the promise version
+pool.query = util.promisify(pool.query);
+
+//export the pool to be usable outside this middleware
+module.exports = pool;
+
+
+/*exports.throwConnectionError = function(err){
 	console.error('unable to connect\n',err);
 	//get the response object which was passed as an attribute of this function
 	var res = exports.throwConnectionError.res;
@@ -51,3 +79,4 @@ exports.getConnectionPromise = function(){
 	//return a promise to allow the process to continue in external modules
 	return mysql.createConnection(params);
 }
+*/
